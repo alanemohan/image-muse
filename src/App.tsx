@@ -8,8 +8,15 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
+import SignIn from "./pages/SignIn";
+import SignUp from "./pages/SignUp";
+import Profile from "./pages/Profile";
+import Favorites from "./pages/Favorites";
 import { Navbar } from "@/components/Navbar";
-import { initializeBackground } from "@/services/backgroundService";
+import { FuturisticBackground } from "@/components/ui/FuturisticBackground";
+import { ImageDetailPage } from "@/pages/ImageDetail";
+import { AuthProvider } from "@/context/AuthContext";
+import { FavoritesProvider } from "@/context/FavoritesContext";
 
 // ✅ Better React Query defaults
 const queryClient = new QueryClient({
@@ -26,43 +33,38 @@ const queryClient = new QueryClient({
 });
 
 const App = () => {
-  useEffect(() => {
-    // Initialize background on app load
-    initializeBackground().catch((error) => {
-      console.error("Failed to initialize background:", error);
-
-      // Fallback to gradient
-      document.documentElement.style.setProperty(
-        "--background-image",
-        "linear-gradient(135deg, #0f0f1e 0%, #1a0033 50%, #2d0052 100%)"
-      );
-    });
-
-    // Log only in development
-    if (import.meta.env.DEV) {
-      console.log(
-        "App initialized - dark mode enabled, background service started"
-      );
-    }
-  }, []);
+    // ... useEffect ...
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-
-        <BrowserRouter>
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/about" element={<About />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+        <AuthProvider>
+            <FavoritesProvider>
+                <TooltipProvider>
+                    <Toaster />
+                    <Sonner />
+                    
+                    <div className="relative min-h-screen text-slate-100 font-sans selection:bg-cyan-500/30">
+                    <FuturisticBackground />
+                    
+                    <BrowserRouter>
+                        <Navbar />
+                        <Routes>
+                          <Route path="/" element={<Index />} />
+                          <Route path="/signin" element={<SignIn />} />
+                          <Route path="/signup" element={<SignUp />} />
+                          <Route path="/profile" element={<Profile />} />
+                          <Route path="/favorites" element={<Favorites />} />
+                          <Route path="/image/:id" element={<ImageDetailPage />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/about" element={<About />} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+                    </BrowserRouter>
+                    </div>
+                </TooltipProvider>
+            </FavoritesProvider>
+        </AuthProvider>
     </QueryClientProvider>
   );
 };

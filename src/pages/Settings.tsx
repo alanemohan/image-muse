@@ -141,6 +141,39 @@ const Settings = () => {
             </CardContent>
           </Card>
 
+          {/* API Configuration */}
+          <Card className="bg-slate-900/50 border-cyan-700/50 shadow-[0_0_20px_rgba(6,182,212,0.1)] mb-6">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <RefreshCw size={20} className="text-cyan-400" />
+                AI Configuration
+              </CardTitle>
+              <CardDescription>Configure your Gemini API access</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                    <h3 className="text-sm font-semibold text-slate-300 mb-2">Gemini API Key</h3>
+                    <p className="text-sm text-slate-400 mb-3">
+                        Enter your Google Gemini API key to enable AI features.
+                    </p>
+                    <div className="flex gap-2">
+                        <input 
+                            type="password" 
+                            placeholder="AIzaSy..."
+                            className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-sm text-white flex-1"
+                            onChange={(e) => {
+                                localStorage.setItem('gemini_api_key', e.target.value);
+                            }}
+                            defaultValue={localStorage.getItem('gemini_api_key') || ''}
+                        />
+                        <Button variant="secondary" onClick={() => window.location.reload()}>
+                            Save
+                        </Button>
+                    </div>
+                </div>
+            </CardContent>
+          </Card>
+
           {/* Information */}
           <Card className="bg-slate-900/50 border-slate-700/50">
             <CardHeader>

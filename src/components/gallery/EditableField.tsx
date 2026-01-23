@@ -70,7 +70,7 @@ export const EditableField = ({
             value={editedValue}
             onChange={(e) => setEditedValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="resize-none text-sm min-h-[60px] bg-muted/50 border-primary/20 focus:border-primary"
+            className="resize-none text-sm min-h-[60px] bg-muted/50 border-primary/20 focus:border-primary text-foreground"
             placeholder={`Enter ${label.toLowerCase()}...`}
           />
         ) : (
@@ -79,7 +79,7 @@ export const EditableField = ({
             value={editedValue}
             onChange={(e) => setEditedValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="text-sm bg-muted/50 border-primary/20 focus:border-primary"
+            className="text-sm bg-muted/50 border-primary/20 focus:border-primary text-foreground"
             placeholder={`Enter ${label.toLowerCase()}...`}
           />
         )}

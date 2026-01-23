@@ -1,149 +1,71 @@
-# 🖼️ AI Image Metadata & Caption Generator
+# 🖼️ Image Muse - AI Image Gallery (v2.0)
 
-A modern, AI-powered web application for uploading, analyzing, and managing images with automatic metadata extraction, smart captions, and rich gallery features.
+A modern, AI-powered image gallery app that automatically generates titles, descriptions, and captions using Google Gemini. Upload images, extract metadata, search, edit, and download with watermarks.
 
-## 🚀 Features
+## ✨ Key Features
 
-### 🖼️ Image Gallery Management
-- Upload multiple images (JPG, PNG, GIF, WebP)
-- Drag-and-drop upload support
-- Responsive grid layout
-- Full-screen preview modal with zoom & pan
-- Auto-play image carousel with reordering
+- **Smart Image Upload** - Drag-and-drop multiple images (JPG, PNG, GIF, WebP)
+- **AI-Powered Captions** - Auto-generate titles & descriptions with Google Gemini
+- **EXIF Metadata** - Extract camera info, ISO, focal length, GPS coordinates
+- **Advanced Search** - Filter by title, description, caption, or aspect ratio
+- **Image Editing** - Inline editing with regenerate AI captions
+- **Watermark Download** - Download images with custom watermark overlay
+- **Dark Mode UI** - Glassmorphism design with smooth animations
+- **Local Storage** - Persistent gallery using browser storage
+- **Fully Responsive** - Works on mobile, tablet, and desktop
 
-### 🤖 AI-Powered Image Analysis
-- Automatic title, description, and caption generation
-- Google Gemini AI integration
-- EXIF metadata extraction:
-  - Dimensions
-  - Camera model
-  - ISO, focal length
-  - Date & GPS (if available)
-- Smart fallback when AI is unavailable
-- Retry logic with exponential backoff
-- Confidence indicators
+## 🛠️ Tech Stack
 
-### 🔍 Search & Filtering
-- Search by title, description, caption, or tags
-- Sort by: Newest, Oldest, Title, Image size
-- Filter by aspect ratio: Landscape, Portrait, Square
-- Multi-select for bulk actions
+**Frontend:** React 18 + TypeScript | **Build:** Vite | **UI:** Tailwind CSS + shadcn/ui  
+**AI:** Google Gemini API | **Backend:** Supabase Edge Functions | **Icons:** Lucide React
 
-### ✏️ Image Management
-- Inline editing of title, description, and caption
-- Regenerate AI captions
-- Download images with watermark overlay
-- Bulk delete support
-- Local persistence using browser storage
+## 🚀 Quick Start
 
-### 🎨 UI & UX
-- Dark mode enabled by default
-- Glassmorphism UI style
-- Animated transitions
-- Dynamic Unsplash background images
-- Fully responsive for mobile, tablet, and desktop
-
-## 🧱 Tech Stack
-
-- **Frontend:** React 18 + TypeScript
-- **Build Tool:** Vite
-- **Styling:** Tailwind CSS + shadcn/ui
-- **AI:** Google Gemini (gemini-1.5-flash)
-- **Backend:** Supabase Edge Functions
-- **State Management:** React Hooks
-- **Icons:** Lucide React
-
-## ⚡ Quick Start
-
-### ✅ Prerequisites
-- Node.js 18+ (or Bun)
+### Prerequisites
+- Node.js 18+ or Bun
 - Google Gemini API Key
-- Supabase account (for Edge Functions)
+- Supabase account (optional)
 
-### 📥 Installation
+### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/alanemohan/image-muse.git
+# Clone repo
+git clone https://github.com/yourusername/image-muse.git
 cd image-muse
 
 # Install dependencies
-npm install
-# or
-bun install
+npm install  # or: bun install
 
-# Start development server
-npm run dev
-# or
-bun run dev
-```
-
-App runs at: 👉 **http://localhost:8082**
-
-## 🔐 Environment Setup
-
-Create a `.env.local` file:
-
-```env
-VITE_SUPABASE_URL=your-supabase-url
-VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key
+# Create .env.local with your API keys
+VITE_SUPABASE_URL=your-url
+VITE_SUPABASE_PUBLISHABLE_KEY=your-key
 VITE_GEMINI_API_KEY=your-gemini-key
 VITE_UNSPLASH_API_KEY=your-unsplash-key
+
+# Start dev server
+npm run dev  # or: bun run dev
 ```
 
-⚠️ **Never commit .env files to GitHub.**
+App runs at: **http://localhost:8082**
 
-## ☁️ Supabase Edge Function Setup
+## 📦 Available Scripts
 
-1. **Install Supabase CLI**
-   ```bash
-   npm install -g supabase
-   ```
+```bash
+npm run build      # Production build
+npm run preview    # Preview production build
+npm run lint       # Run ESLint
+npm run test       # Run tests
+npm run test:watch # Watch mode tests
+```
 
-2. **Link Project**
-   ```bash
-   supabase link --project-ref YOUR_PROJECT_ID
-   ```
+## 🔐 Security
 
-3. **Set Gemini API Key**
-   ```bash
-   supabase secrets set GEMINI_API_KEY=YOUR_API_KEY
-   ```
+- ✅ All API keys in `.env.local` (ignored by Git)
+- ✅ No sensitive data in source code
+- ✅ Environment variables for configuration
+- ✅ `.gitignore` properly configured
+- ✅ Safe to push to GitHub
 
-4. **Deploy Function**
-   ```bash
-   supabase functions deploy analyze-image
-   ```
+## 📝 License
 
-## ⌨️ Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| `Esc` | Close preview |
-| `+` | Zoom in |
-| `-` | Zoom out |
-| Drag | Pan image |
-
-## ⚠️ Troubleshooting
-
-### Images Not Showing
-- Clear browser storage
-- Refresh background image
-- Check file formats
-
-### AI Not Working
-- Check API key in Supabase secrets
-- Verify Edge Function deployment
-- Check rate limits
-
-## 🤝 Contributing
-
-1. Fork the repo
-2. Create feature branch: `git checkout -b feature/new-feature`
-3. Commit changes: `git commit -m "Add feature"`
-4. Push: `git push origin feature/new-feature`
-5. Open Pull Request
-
-## 📄 License
-
-MIT License — free to use, modify, and distribute
+MIT License - feel free to use this project!

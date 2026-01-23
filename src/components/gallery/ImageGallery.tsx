@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useGallery } from '@/hooks/useGallery';
 import { GalleryHeader } from './GalleryHeader';
 import { ImageUploader } from './ImageUploader';
@@ -9,7 +9,6 @@ import { ImageCarousel } from './ImageCarousel';
 import { Images } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { GalleryImage } from '@/types/gallery';
-import { setBackgroundImage } from '@/services/backgroundService';
 
 export const ImageGallery = () => {
   const { 
@@ -33,13 +32,6 @@ export const ImageGallery = () => {
   });
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
 
-  // Change background when images are added
-  useEffect(() => {
-    if (images.length > 0) {
-      setBackgroundImage();
-    }
-  }, [images.length]);
-
   // Filter and sort images
   const filteredImages = useMemo(() => {
     let result = [...images];
@@ -56,9 +48,10 @@ export const ImageGallery = () => {
     }
 
     // Aspect ratio filter
-    if (filters.aspectRatio !== 'all' && img.metadata.width && img.metadata.height) {
+    if (filters.aspectRatio !== 'all') {
       result = result.filter(img => {
-        const ratio = img.metadata.width! / img.metadata.height!;
+        if (!img.metadata.width || !img.metadata.height) return false;
+        const ratio = img.metadata.width / img.metadata.height;
         switch (filters.aspectRatio) {
           case 'landscape':
             return ratio > 1.5;

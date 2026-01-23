@@ -3,6 +3,7 @@ import { X, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import { GalleryImage } from '@/types/gallery';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ScanEffect } from '@/components/ui/ScanEffect';
 
 interface ImagePreviewModalProps {
   image: GalleryImage | null;
@@ -89,6 +90,8 @@ export const ImagePreviewModal = ({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
+          <ScanEffect active={true} color="cyan" className="z-20 pointer-events-none" />
+          
           <img
             src={image.url}
             alt={image.title}

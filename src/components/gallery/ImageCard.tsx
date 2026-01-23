@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Expand, X, Sparkles } from 'lucide-react';
+import { Trash2, Expand, X, Sparkles, Heart } from 'lucide-react';
 import { GalleryImage } from '@/types/gallery';
 import { MetadataDisplay } from './MetadataDisplay';
 import { EditableField } from './EditableField';
@@ -7,6 +7,9 @@ import { WatermarkDownload } from './WatermarkDownload';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { useNavigate } from 'react-router-dom';
+import { useFavorites } from '@/context/FavoritesContext';
 
 interface ImageCardProps {
   image: GalleryImage;
@@ -29,13 +32,14 @@ export const ImageCard = ({
 }: ImageCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const navigate = useNavigate();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const favorited = isFavorite(image.id);
 
   return (
     <>
-      <div className={cn(
-        "group relative bg-card rounded-2xl overflow-hidden animate-fade-in",
-        "border border-border/50 shadow-sm-custom hover:shadow-md-custom",
-        "transition-all duration-300 hover:scale-[1.01]"
+      <GlassCard className={cn(
+        "group animate-fade-in p-0"
       )}>
         {/* Image Container */}
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
@@ -68,31 +72,41 @@ export const ImageCard = ({
                   size="sm"
                   variant="secondary"
                   className="gradient-glass border border-border/50 text-foreground h-8"
-                  onClick={() => {
-                    setIsExpanded(true);
-                    onPreview?.();
-                  }}
+                  onClick={() => navigate(`/image/${image.id}`, { state: { image } })}
                 >
                   <Expand className="w-3.5 h-3.5 mr-1.5" />
                   View
                 </Button>
                 <WatermarkDownload image={image} />
               </div>
-              <Button
-                size="icon"
-                variant="destructive"
-                className="w-8 h-8"
-                onClick={onDelete}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="flex gap-2">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className={cn(
+                        "w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 border border-white/10",
+                        favorited ? "text-red-500" : "text-white"
+                    )}
+                    onClick={() => toggleFavorite(image)}
+                  >
+                    <Heart className={cn("w-4 h-4", favorited && "fill-current")} />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="w-8 h-8"
+                    onClick={onDelete}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-4 space-y-3">
-          {/* Title */}
+            {/* Title */}
           <EditableField
             value={image.title}
             onSave={onUpdateTitle}
@@ -149,35 +163,7 @@ export const ImageCard = ({
             <MetadataDisplay metadata={image.metadata} />
           </div>
         </div>
-      </div>
-
-      {/* Lightbox */}
-      {isExpanded && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-md animate-fade-in"
-          onClick={() => setIsExpanded(false)}
-        >
-          <Button
-            size="icon"
-            variant="ghost"
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-muted/50 hover:bg-muted z-10"
-            onClick={() => setIsExpanded(false)}
-          >
-            <X className="w-5 h-5" />
-          </Button>
-          <img
-            src={image.url}
-            alt={image.title || image.name}
-            className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-lg-custom animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-2xl text-center px-4">
-            <h3 className="text-xl font-bold text-foreground mb-2">{image.title}</h3>
-            <p className="text-base text-foreground/90 mb-1">{image.caption}</p>
-            <p className="text-sm text-muted-foreground">{image.name}</p>
-          </div>
-        </div>
-      )}
+      </GlassCard>
     </>
   );
 };
