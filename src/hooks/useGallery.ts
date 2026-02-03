@@ -3,6 +3,9 @@ import { GalleryImage, ImageMetadata } from '@/types/gallery';
 import { useImageMetadata } from './useImageMetadata';
 import { analyzeImage, fileToBase64, urlToBase64, regenerateCaption, APIError } from '@/services/imageAnalysis';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
+import { bulkDeleteImages, createImage, deleteImage as deleteImageRemote, listImages, updateImage as updateImageRemote, uploadImage } from '@/services/imageService';
 
 const STORAGE_KEY = 'gallery-images-v2';
 
@@ -84,29 +87,58 @@ export const useGallery = () => {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { extractMetadata } = useImageMetadata();
+  const { user } = useAuth();
+  const isServerMode = Boolean(user);
+  const { settings } = useSettings();
 
-  // Load from localStorage on mount
+  // Load from backend (signed-in) or localStorage (guest)
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setImages(parsed.map((img: any) => ({
-          ...img,
-          createdAt: new Date(img.createdAt),
-          file: null,
-          isAnalyzing: false,
-          // Use stored URL directly (it's already a full data URL)
-          url: img.url
-        })));
-      } catch (e) {
-        console.error('Failed to load gallery from storage:', e);
+    let active = true;
+    const load = async () => {
+      if (isServerMode) {
+        setIsLoading(true);
+        try {
+          const serverImages = await listImages();
+          if (active) setImages(serverImages);
+        } catch (e) {
+          console.error('Failed to load gallery from backend:', e);
+        } finally {
+          if (active) setIsLoading(false);
+        }
+        return;
       }
-    }
-  }, []);
 
-  // Save to localStorage when images change
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (active) {
+            setImages(parsed.map((img: any) => ({
+              ...img,
+              createdAt: new Date(img.createdAt),
+              file: null,
+              isAnalyzing: false,
+              isPersisted: false,
+              // Use stored URL directly (it's already a full data URL)
+              url: img.url
+            })));
+          }
+        } catch (e) {
+          console.error('Failed to load gallery from storage:', e);
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [isServerMode]);
+
+  // Save to localStorage when images change (guest mode only)
   useEffect(() => {
+    if (isServerMode) return;
+
     if (images.length > 0) {
       const toStore = images.map(img => ({
         id: img.id,
@@ -124,7 +156,7 @@ export const useGallery = () => {
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
-  }, [images]);
+  }, [images, isServerMode]);
 
   const addImages = useCallback(async (files: FileList | File[]) => {
     setIsLoading(true);
@@ -136,24 +168,71 @@ export const useGallery = () => {
       if (!file.type.startsWith('image/')) continue;
 
       const metadata = await extractMetadata(file);
-      // Convert file to base64 for persistence
-      // fileToBase64 already returns full data URL, no need to wrap it again
-      const url = await fileToBase64(file);
       const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      const fallbackCaption = generateFallbackCaption(file.name, metadata);
+      const initialTags = generateTags(metadata);
+      let url = '';
       
-      const imageData: GalleryImage = {
+      let imageData: GalleryImage = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         file,
         url,
         name: file.name,
         title: cleanName,
         description: 'Analyzing image...',
-        caption: generateFallbackCaption(file.name, metadata),
+        caption: fallbackCaption,
         metadata,
         createdAt: new Date(),
-        tags: generateTags(metadata),
+        tags: initialTags,
         isAnalyzing: true,
+        isPersisted: !isServerMode,
       };
+
+      if (isServerMode) {
+        try {
+          const uploadResult = await uploadImage(file);
+          const uploadedUrl = uploadResult.url;
+
+          const created = await createImage({
+            name: file.name,
+            url: uploadedUrl,
+            file_path: uploadResult.file_path,
+            title: cleanName,
+            description: 'Analyzing image...',
+            caption: fallbackCaption,
+            metadata,
+            tags: initialTags,
+          });
+
+          imageData = {
+            ...created,
+            file,
+            metadata,
+            tags: created.tags,
+            isAnalyzing: true,
+            isPersisted: true,
+          };
+        } catch (error) {
+          console.error('Failed to persist image:', error);
+          const fallbackUrl = await fileToBase64(file);
+          imageData = {
+            ...imageData,
+            url: fallbackUrl,
+            isPersisted: false,
+          };
+          toast({
+            title: "Upload failed",
+            description: "Could not save to backend. The image will stay local for this session.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        const fallbackUrl = await fileToBase64(file);
+        imageData = {
+          ...imageData,
+          url: fallbackUrl,
+        };
+      }
       
       newImages.push(imageData);
     }
@@ -163,26 +242,64 @@ export const useGallery = () => {
 
     // Analyze images with AI in background
     for (const img of newImages) {
+      if (!settings.autoAnalyze) {
+        const description = generateFallbackDescription(img.metadata, img.name);
+        setImages(prev => prev.map(i =>
+          i.id === img.id
+            ? { ...i, description, isAnalyzing: false }
+            : i
+        ));
+
+        if (isServerMode && img.isPersisted) {
+          void updateImageRemote(img.id, { description }).catch(error => {
+            console.error('Failed to update fallback description:', error);
+          });
+        }
+        continue;
+      }
+
       try {
         const base64 = await fileToBase64(img.file!);
         const analysis = await analyzeImage(base64);
+        const mergedTags = [...new Set([...img.tags, ...(analysis.tags || [])])];
+        const mergedMetadata = analysis.metadata
+          ? { ...img.metadata, ...analysis.metadata }
+          : img.metadata;
+        const updatedTitle = analysis.title || img.title;
+        const updatedDescription = analysis.description || 'No description available';
+        const updatedCaption = analysis.caption || img.caption;
         
         setImages(prev => prev.map(i => 
           i.id === img.id 
             ? { 
                 ...i, 
-                title: analysis.title || i.title,
-                description: analysis.description || 'No description available',
-                caption: analysis.caption || i.caption,
-                tags: [...new Set([...i.tags, ...(analysis.tags || [])])],
+                title: updatedTitle,
+                description: updatedDescription,
+                caption: updatedCaption,
+                metadata: mergedMetadata,
+                tags: mergedTags,
                 isAnalyzing: false 
               } 
             : i
         ));
+
+        if (isServerMode && img.isPersisted) {
+          try {
+            await updateImageRemote(img.id, {
+              title: updatedTitle,
+              description: updatedDescription,
+              caption: updatedCaption,
+              metadata: mergedMetadata,
+              tags: mergedTags,
+            });
+          } catch (error) {
+            console.error('Failed to update image metadata:', error);
+          }
+        }
         
         toast({
           title: "Image analyzed",
-          description: `"${analysis.title}" has been processed with AI`,
+          description: `"${analysis.title || img.title}" has been processed with AI`,
         });
       } catch (error) {
         console.error('Failed to analyze image:', error);
@@ -199,6 +316,16 @@ export const useGallery = () => {
               } 
             : i
         ));
+
+        if (isServerMode && img.isPersisted) {
+          try {
+            await updateImageRemote(img.id, {
+              description,
+            });
+          } catch (updateError) {
+            console.error('Failed to update fallback description:', updateError);
+          }
+        }
 
         // Show different messages based on error type
         if (error instanceof APIError) {
@@ -236,25 +363,46 @@ export const useGallery = () => {
         }
       }
     }
-  }, [extractMetadata]);
+  }, [extractMetadata, isServerMode, settings.autoAnalyze]);
 
   const updateTitle = useCallback((id: string, title: string) => {
     setImages(prev => prev.map(img => 
       img.id === id ? { ...img, title } : img
     ));
-  }, []);
+
+    const target = images.find(img => img.id === id);
+    if (isServerMode && target?.isPersisted) {
+      void updateImageRemote(id, { title }).catch(error => {
+        console.error('Failed to update title:', error);
+      });
+    }
+  }, [images, isServerMode]);
 
   const updateDescription = useCallback((id: string, description: string) => {
     setImages(prev => prev.map(img => 
       img.id === id ? { ...img, description } : img
     ));
-  }, []);
+
+    const target = images.find(img => img.id === id);
+    if (isServerMode && target?.isPersisted) {
+      void updateImageRemote(id, { description }).catch(error => {
+        console.error('Failed to update description:', error);
+      });
+    }
+  }, [images, isServerMode]);
 
   const updateCaption = useCallback((id: string, caption: string) => {
     setImages(prev => prev.map(img => 
       img.id === id ? { ...img, caption } : img
     ));
-  }, []);
+
+    const target = images.find(img => img.id === id);
+    if (isServerMode && target?.isPersisted) {
+      void updateImageRemote(id, { caption }).catch(error => {
+        console.error('Failed to update caption:', error);
+      });
+    }
+  }, [images, isServerMode]);
 
   const regenerateCaptionForImage = useCallback(async (id: string) => {
     const image = images.find(i => i.id === id);
@@ -273,6 +421,14 @@ export const useGallery = () => {
       setImages(prev => prev.map(img => 
         img.id === id ? { ...img, caption: newCaption, isAnalyzing: false } : img
       ));
+
+      if (isServerMode && image.isPersisted) {
+        try {
+          await updateImageRemote(id, { caption: newCaption });
+        } catch (error) {
+          console.error('Failed to persist regenerated caption:', error);
+        }
+      }
       
       toast({
         title: "Caption regenerated",
@@ -298,7 +454,7 @@ export const useGallery = () => {
         });
       }
     }
-  }, [images]);
+  }, [images, isServerMode]);
 
   const deleteImage = useCallback((id: string) => {
     setImages(prev => {
@@ -308,11 +464,41 @@ export const useGallery = () => {
       }
       return prev.filter(i => i.id !== id);
     });
+
+    const target = images.find(img => img.id === id);
+    if (isServerMode && target?.isPersisted) {
+      void deleteImageRemote(id).catch(error => {
+        console.error('Failed to delete image:', error);
+      });
+    }
+
     toast({
       title: "Image deleted",
       description: "The image has been removed from the gallery",
     });
-  }, []);
+  }, [images, isServerMode]);
+
+  const deleteImages = useCallback((ids: string[]) => {
+    setImages(prev => {
+      prev.forEach(img => {
+        if (ids.includes(img.id) && img.url && img.url.startsWith('blob:')) {
+          URL.revokeObjectURL(img.url);
+        }
+      });
+      return prev.filter(img => !ids.includes(img.id));
+    });
+
+    if (isServerMode) {
+      void bulkDeleteImages({ ids }).catch(error => {
+        console.error('Failed to bulk delete images:', error);
+      });
+    }
+
+    toast({
+      title: "Images deleted",
+      description: `${ids.length} image${ids.length !== 1 ? 's' : ''} removed`,
+    });
+  }, [isServerMode]);
 
   const clearGallery = useCallback(() => {
     images.forEach(img => {
@@ -321,12 +507,20 @@ export const useGallery = () => {
       }
     });
     setImages([]);
-    localStorage.removeItem(STORAGE_KEY);
+
+    if (isServerMode) {
+      void bulkDeleteImages({ all: true }).catch(error => {
+        console.error('Failed to clear gallery:', error);
+      });
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
     toast({
       title: "Gallery cleared",
       description: "All images have been removed",
     });
-  }, [images]);
+  }, [images, isServerMode]);
 
   return {
     images,
@@ -337,6 +531,7 @@ export const useGallery = () => {
     updateCaption,
     regenerateCaptionForImage,
     deleteImage,
+    deleteImages,
     clearGallery,
   };
 };

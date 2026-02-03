@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Menu, X, Home, Settings, Info, Zap, User, LogIn, Heart } from 'lucide-react';
+import { Menu, X, Home, Settings, Info, Zap, User, LogIn, Heart, ShieldAlert, Terminal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 
@@ -27,7 +27,11 @@ export const Navbar = () => {
   if (user) {
     navItems.push({ name: 'Favorites', path: '/favorites', icon: Heart });
     navItems.push({ name: 'Profile', path: '/profile', icon: User });
+    navItems.push({ name: 'Logs', path: '/errors', icon: Terminal });
     navItems.push({ name: 'Settings', path: '/settings', icon: Settings });
+    if (user.is_admin) {
+      navItems.push({ name: 'Admin', path: '/admin', icon: ShieldAlert });
+    }
   }
 
   const isActive = (path: string) => location.pathname === path;

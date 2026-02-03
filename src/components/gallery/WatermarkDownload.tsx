@@ -3,12 +3,15 @@ import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GalleryImage } from '@/types/gallery';
 import { toast } from '@/hooks/use-toast';
+import { useSettings } from '@/context/SettingsContext';
 
 interface WatermarkDownloadProps {
   image: GalleryImage;
 }
 
 export const WatermarkDownload = ({ image }: WatermarkDownloadProps) => {
+  const { settings } = useSettings();
+
   const downloadWithWatermark = useCallback(async () => {
     try {
       const canvas = document.createElement('canvas');
@@ -76,6 +79,15 @@ export const WatermarkDownload = ({ image }: WatermarkDownloadProps) => {
         }
       }
 
+      // Draw custom watermark text (bottom-right)
+      if (settings.watermarkText) {
+        ctx.font = `${baseFontSize * 0.7}px system-ui, -apple-system, sans-serif`;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(settings.watermarkText, canvas.width - padding, canvas.height - padding);
+      }
+
       // Convert to blob and download
       canvas.toBlob((blob) => {
         if (!blob) {
@@ -103,7 +115,7 @@ export const WatermarkDownload = ({ image }: WatermarkDownloadProps) => {
         variant: "destructive",
       });
     }
-  }, [image]);
+  }, [image, settings.watermarkText]);
 
   return (
     <Button

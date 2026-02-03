@@ -2,9 +2,11 @@ import { motion } from "framer-motion";
 import { Heart } from "lucide-react";
 import { useFavorites } from "@/context/FavoritesContext";
 import { ImageCard } from "@/components/gallery/ImageCard";
+import { useSettings } from "@/context/SettingsContext";
 
 const Favorites = () => {
   const { favorites, removeFavorite } = useFavorites();
+  const { settings } = useSettings();
 
   const handleNoOp = () => {};
 
@@ -42,6 +44,7 @@ const Favorites = () => {
                             onUpdateCaption={handleNoOp}
                             onRegenerateCaption={handleNoOp}
                             onDelete={() => removeFavorite(image.id)}
+                            showMetadata={settings.showMetadata}
                         />
                     </div>
                 ))}

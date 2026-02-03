@@ -24,13 +24,13 @@ export const AIAssistant = () => {
     setIsTyping(true);
 
     try {
-        // Get response from real API
-        const response = await generateAIResponse(userMessage, messages.map(m => ({ role: m.role, parts: m.content })));
+        // Get response from backend AI chat
+        const response = await generateAIResponse(userMessage, messages);
         
         setMessages(prev => [...prev, { role: 'ai', content: response }]);
     } catch (err: any) {
         console.error(err);
-        const errorMsg = err.message === "API Key missing" 
+        const errorMsg = err.message?.includes("GEMINI_API_KEY") || err.message?.includes("API_KEY")
             ? "I need a Gemini API Key to function. Please add it in Settings." 
             : "I'm having trouble connecting to the neural network.";
         

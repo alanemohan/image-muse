@@ -1,4 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
+import { analyzeImageViaBackend, regenerateCaptionViaBackend } from '@/services/aiBackend';
+import type { ApiError } from '@/services/apiClient';
 import { AIAnalysisResult } from '@/types/gallery';
 
 export class APIError extends Error {
@@ -32,52 +33,14 @@ const isRetryableError = (statusCode?: number, message?: string): boolean => {
 
 export const analyzeImage = async (imageBase64: string, attempt = 1): Promise<AIAnalysisResult> => {
   try {
-    const { data, error } = await supabase.functions.invoke('analyze-image', {
-      body: { imageBase64, type: 'analyze' }
-    });
-
-    if (error) {
-      console.error(`Attempt ${attempt}/${MAX_RETRIES} - Error analyzing image:`, error);
-      
-      const apiError = new APIError(
-        error.message || 'Failed to analyze image',
-        error.status,
-        isRetryableError(error.status, error.message)
-      );
-
-      if (apiError.isRetryable && attempt < MAX_RETRIES) {
-        const delay = getRetryDelay(attempt);
-        console.log(`Retrying in ${delay}ms...`);
-        await sleep(delay);
-        return analyzeImage(imageBase64, attempt + 1);
-      }
-
-      throw apiError;
-    }
-
-    if (data.error) {
-      const apiError = new APIError(
-        data.error,
-        undefined,
-        isRetryableError(undefined, data.error)
-      );
-
-      if (apiError.isRetryable && attempt < MAX_RETRIES) {
-        const delay = getRetryDelay(attempt);
-        console.log(`Retrying in ${delay}ms...`);
-        await sleep(delay);
-        return analyzeImage(imageBase64, attempt + 1);
-      }
-
-      throw apiError;
-    }
-
+    const data = await analyzeImageViaBackend(imageBase64);
     return data as AIAnalysisResult;
   } catch (err) {
     if (err instanceof APIError) throw err;
-    
+
     const message = err instanceof Error ? err.message : 'Unknown error';
-    const apiError = new APIError(message, undefined, isRetryableError(undefined, message));
+    const status = (err as ApiError)?.status;
+    const apiError = new APIError(message, status, isRetryableError(status, message));
 
     if (apiError.isRetryable && attempt < MAX_RETRIES) {
       const delay = getRetryDelay(attempt);
@@ -92,52 +55,13 @@ export const analyzeImage = async (imageBase64: string, attempt = 1): Promise<AI
 
 export const regenerateCaption = async (imageBase64: string, attempt = 1): Promise<string> => {
   try {
-    const { data, error } = await supabase.functions.invoke('analyze-image', {
-      body: { imageBase64, type: 'regenerate_caption' }
-    });
-
-    if (error) {
-      console.error(`Attempt ${attempt}/${MAX_RETRIES} - Error regenerating caption:`, error);
-      
-      const apiError = new APIError(
-        error.message || 'Failed to regenerate caption',
-        error.status,
-        isRetryableError(error.status, error.message)
-      );
-
-      if (apiError.isRetryable && attempt < MAX_RETRIES) {
-        const delay = getRetryDelay(attempt);
-        console.log(`Retrying in ${delay}ms...`);
-        await sleep(delay);
-        return regenerateCaption(imageBase64, attempt + 1);
-      }
-
-      throw apiError;
-    }
-
-    if (data.error) {
-      const apiError = new APIError(
-        data.error,
-        undefined,
-        isRetryableError(undefined, data.error)
-      );
-
-      if (apiError.isRetryable && attempt < MAX_RETRIES) {
-        const delay = getRetryDelay(attempt);
-        console.log(`Retrying in ${delay}ms...`);
-        await sleep(delay);
-        return regenerateCaption(imageBase64, attempt + 1);
-      }
-
-      throw apiError;
-    }
-
-    return data.caption;
+    return await regenerateCaptionViaBackend(imageBase64);
   } catch (err) {
     if (err instanceof APIError) throw err;
-    
+
     const message = err instanceof Error ? err.message : 'Unknown error';
-    const apiError = new APIError(message, undefined, isRetryableError(undefined, message));
+    const status = (err as ApiError)?.status;
+    const apiError = new APIError(message, status, isRetryableError(status, message));
 
     if (apiError.isRetryable && attempt < MAX_RETRIES) {
       const delay = getRetryDelay(attempt);

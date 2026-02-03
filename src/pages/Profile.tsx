@@ -6,10 +6,10 @@ import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { User, LogOut, Camera, Save, X } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { updateProfile } from "@/services/authService";
 
 const Profile = () => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, setUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -17,23 +17,20 @@ const Profile = () => {
 
   useEffect(() => {
     if (user) {
-        setAvatarUrl(user.user_metadata?.avatar_url || "");
-        setFullName(user.user_metadata?.full_name || "");
+        setAvatarUrl(user.avatar_url || "");
+        setFullName(user.full_name || "");
     }
   }, [user]);
 
   const handleUpdateProfile = async () => {
     setLoading(true);
     try {
-        const { error } = await supabase.auth.updateUser({
-            data: {
-                full_name: fullName,
-                avatar_url: avatarUrl
-            }
+        const updated = await updateProfile({
+            full_name: fullName,
+            avatar_url: avatarUrl
         });
         
-        if (error) throw error;
-        
+        setUser(updated);
         toast.success("Profile updated successfully!");
         setIsEditing(false);
     } catch (error: any) {

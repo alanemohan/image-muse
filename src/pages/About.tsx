@@ -23,7 +23,7 @@ const About = () => {
   const technologies = [
     { category: 'Frontend', tools: 'React 18, TypeScript, Vite, Tailwind CSS' },
     { category: 'AI', tools: 'Google Gemini API (gemini-1.5-flash)' },
-    { category: 'Backend', tools: 'Supabase, Edge Functions' },
+    { category: 'Backend', tools: 'Node.js, Express, SQLite (JWT auth)' },
     { category: 'Storage', tools: 'Unsplash API, localStorage' },
     { category: 'UI Components', tools: 'shadcn/ui, Lucide Icons' }
   ];

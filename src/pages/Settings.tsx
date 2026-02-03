@@ -3,8 +3,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Trash2, RefreshCw } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { useSettings } from '@/context/SettingsContext';
+import { useAuth } from '@/context/AuthContext';
+import { listImages } from '@/services/imageService';
 
 const Settings = () => {
+  const { settings, updateSettings, loading } = useSettings();
+  const { user } = useAuth();
   const clearStorage = useCallback(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -17,8 +26,37 @@ const Settings = () => {
     window.location.reload();
   }, []);
 
-  const exportData = useCallback(() => {
-    const images = localStorage.getItem('galleryImages');
+  const exportData = useCallback(async () => {
+    let images: unknown[] = [];
+
+    if (user) {
+      try {
+        const serverImages = await listImages();
+        images = serverImages.map((img) => ({
+          id: img.id,
+          name: img.name,
+          title: img.title,
+          description: img.description,
+          caption: img.caption,
+          metadata: img.metadata,
+          createdAt: img.createdAt,
+          tags: img.tags,
+          url: img.url,
+        }));
+      } catch (error) {
+        console.error("Failed to export server images:", error);
+      }
+    } else {
+      const imagesRaw = localStorage.getItem('gallery-images-v2');
+      if (imagesRaw) {
+        try {
+          images = JSON.parse(imagesRaw);
+        } catch {
+          images = [];
+        }
+      }
+    }
+
     const dataStr = JSON.stringify(images, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
@@ -27,7 +65,7 @@ const Settings = () => {
     link.download = `image-muse-backup-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     URL.revokeObjectURL(url);
-  }, []);
+  }, [user]);
 
   return (
     <div className="min-h-screen pt-24 pb-12 px-4 sm:px-6 lg:px-8">
@@ -113,6 +151,41 @@ const Settings = () => {
               <CardDescription>Customize the appearance</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label className="text-sm text-slate-300">Show Metadata</Label>
+                    <p className="text-xs text-slate-500">Display camera data on image cards</p>
+                  </div>
+                  <Switch
+                    checked={settings.showMetadata}
+                    onCheckedChange={(value) => updateSettings({ showMetadata: value })}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm text-slate-300">Default Sort</Label>
+                  <Select
+                    value={settings.defaultSort}
+                    onValueChange={(value) =>
+                      updateSettings({ defaultSort: value as typeof settings.defaultSort })
+                    }
+                    disabled={loading}
+                  >
+                    <SelectTrigger className="bg-black/50 border border-slate-700 text-white">
+                      <SelectValue placeholder="Select sort order" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">Newest</SelectItem>
+                      <SelectItem value="oldest">Oldest</SelectItem>
+                      <SelectItem value="title">Title</SelectItem>
+                      <SelectItem value="size">Size</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div>
                 <h3 className="text-sm font-semibold text-slate-300 mb-2">Background Image</h3>
                 <p className="text-sm text-slate-400 mb-3">
@@ -138,6 +211,46 @@ const Settings = () => {
                   <strong className="text-slate-300">Cache:</strong> Images are cached for optimal performance
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Workflow Settings */}
+          <Card className="bg-slate-900/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-xl">Workflow</CardTitle>
+              <CardDescription>Control how new images are processed</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label className="text-sm text-slate-300">Auto Analyze</Label>
+                  <p className="text-xs text-slate-500">Automatically run Gemini analysis after upload</p>
+                </div>
+                <Switch
+                  checked={settings.autoAnalyze}
+                  onCheckedChange={(value) => updateSettings({ autoAnalyze: value })}
+                  disabled={loading}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Watermark Settings */}
+          <Card className="bg-slate-900/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-xl">Watermark</CardTitle>
+              <CardDescription>Customize watermark text on downloads</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Label className="text-sm text-slate-300" htmlFor="watermarkText">Watermark Text</Label>
+              <Input
+                id="watermarkText"
+                value={settings.watermarkText}
+                onChange={(e) => updateSettings({ watermarkText: e.target.value })}
+                placeholder="© Your Name"
+                className="bg-black/50 border border-slate-700 text-white"
+                disabled={loading}
+              />
             </CardContent>
           </Card>
 
@@ -170,6 +283,9 @@ const Settings = () => {
                             Save
                         </Button>
                     </div>
+                    <p className="text-xs text-slate-500 mt-2">
+                      This key is stored locally in your browser. The server also supports a global key via `server/.env`.
+                    </p>
                 </div>
             </CardContent>
           </Card>
@@ -192,6 +308,11 @@ const Settings = () => {
               <p>
                 <strong className="text-slate-300">AI Engine:</strong> Google Gemini API
               </p>
+              {user && (
+                <p>
+                  <strong className="text-slate-300">Settings Storage:</strong> Saved to your account
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -19,6 +19,7 @@ interface ImageCardProps {
   onRegenerateCaption: () => void;
   onDelete: () => void;
   onPreview?: () => void;
+  showMetadata?: boolean;
 }
 
 export const ImageCard = ({ 
@@ -28,7 +29,8 @@ export const ImageCard = ({
   onUpdateCaption, 
   onRegenerateCaption,
   onDelete,
-  onPreview
+  onPreview,
+  showMetadata = true
 }: ImageCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -159,9 +161,11 @@ export const ImageCard = ({
           </div>
 
           {/* Metadata */}
-          <div className="border-t border-border/50 pt-3">
-            <MetadataDisplay metadata={image.metadata} />
-          </div>
+          {showMetadata && (
+            <div className="border-t border-border/50 pt-3">
+              <MetadataDisplay metadata={image.metadata} />
+            </div>
+          )}
         </div>
       </GlassCard>
     </>

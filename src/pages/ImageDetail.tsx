@@ -7,29 +7,75 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { ScanEffect } from '@/components/ui/ScanEffect';
 import { Badge } from '@/components/ui/badge';
 
-import { analyzeImageWithGemini } from '@/services/aiService';
+import { analyzeImage, urlToBase64 } from '@/services/imageAnalysis';
+import { useAuth } from '@/context/AuthContext';
+import { listImages } from '@/services/imageService';
+import { GalleryImage } from '@/types/gallery';
 
 export const ImageDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'metadata' | 'analysis'>('metadata');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scanning, setScanning] = useState(true);
   
   // Real Data State
-  const image = location.state?.image;
+  const image = location.state?.image as GalleryImage | undefined;
+  const [resolvedImage, setResolvedImage] = useState<GalleryImage | null>(image || null);
   const [analysisData, setAnalysisData] = useState<any>(null);
 
   useEffect(() => {
-    if (!image) return;
+    let active = true;
+    const loadImage = async () => {
+      if (resolvedImage || !id) return;
+
+      if (user) {
+        try {
+          const serverImages = await listImages();
+          const found = serverImages.find((img) => img.id === id);
+          if (active) setResolvedImage(found || null);
+        } catch (error) {
+          console.error("Failed to load image:", error);
+        }
+      } else {
+        const stored = localStorage.getItem('gallery-images-v2');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            const found = parsed.find((img: any) => img.id === id);
+            if (active && found) {
+              setResolvedImage({
+                ...found,
+                createdAt: new Date(found.createdAt),
+                file: null,
+                isAnalyzing: false,
+              });
+            }
+          } catch (error) {
+            console.error("Failed to parse stored gallery:", error);
+          }
+        }
+      }
+    };
+
+    void loadImage();
+    return () => {
+      active = false;
+    };
+  }, [id, resolvedImage, user]);
+
+  useEffect(() => {
+    if (!resolvedImage) return;
 
     const performAnalysis = async () => {
         setIsAnalyzing(true);
         try {
             // Check if we have a valid URL before analyzing
-            if (image.url) {
-                const result = await analyzeImageWithGemini(image.url);
+            if (resolvedImage.url) {
+                const base64 = await urlToBase64(resolvedImage.url);
+                const result = await analyzeImage(base64);
                 setAnalysisData(result);
             }
         } catch (error) {
@@ -41,9 +87,9 @@ export const ImageDetailPage = () => {
     };
 
     performAnalysis();
-  }, [image]);
+  }, [resolvedImage]);
 
-  if (!image) {
+  if (!resolvedImage) {
       return (
           <div className="min-h-screen flex items-center justify-center text-slate-400">
               <div className="text-center">
@@ -55,11 +101,11 @@ export const ImageDetailPage = () => {
   }
 
   // Merge Metadata: Use Analysis data if available, else fallback to existing
-  const displayMetadata = analysisData?.metadata || image.metadata || {};
+  const displayMetadata = analysisData?.metadata || resolvedImage.metadata || {};
   const displayAnalysis = analysisData?.analysis || {};
-  const displayTags = analysisData?.tags || image.tags || [];
-  const displayTitle = analysisData?.title || image.title || "Untitled";
-  const displayDesc = analysisData?.description || image.description || "No description available.";
+  const displayTags = analysisData?.tags || resolvedImage.tags || [];
+  const displayTitle = analysisData?.title || resolvedImage.title || "Untitled";
+  const displayDesc = analysisData?.description || resolvedImage.description || "No description available.";
 
   return (
     <div className="min-h-screen pt-24 pb-20 px-4 md:px-8 max-w-7xl mx-auto">
@@ -92,7 +138,7 @@ export const ImageDetailPage = () => {
                     <ScanEffect active={scanning || isAnalyzing} color="cyan" />
                     
                     <img 
-                        src={image.url} 
+                        src={resolvedImage.url} 
                         alt={displayTitle} 
                         className="w-full h-full object-contain bg-black/40"
                     />

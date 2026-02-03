@@ -28,11 +28,25 @@ export interface GalleryImage {
   createdAt: Date;
   tags: string[];
   isAnalyzing?: boolean;
+  isPersisted?: boolean;
 }
 
 export interface AIAnalysisResult {
-  title: string;
-  description: string;
-  caption: string;
-  tags: string[];
+  title?: string;
+  description?: string;
+  caption?: string;
+  tags?: string[];
+  metadata?: {
+    iso?: string | number;
+    fNumber?: string;
+    shutterSpeed?: string;
+    camera?: string;
+    lens?: string;
+    dimensions?: string;
+    dateTime?: string;
+  };
+  analysis?: {
+    composition?: string;
+    sentiment?: string;
+  };
 }

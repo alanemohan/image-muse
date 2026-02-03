@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useGallery } from '@/hooks/useGallery';
 import { GalleryHeader } from './GalleryHeader';
 import { ImageUploader } from './ImageUploader';
@@ -9,6 +9,7 @@ import { ImageCarousel } from './ImageCarousel';
 import { Images } from 'lucide-react';
 import { Toaster } from '@/components/ui/toaster';
 import { GalleryImage } from '@/types/gallery';
+import { useSettings } from '@/context/SettingsContext';
 
 export const ImageGallery = () => {
   const { 
@@ -20,17 +21,23 @@ export const ImageGallery = () => {
     updateCaption, 
     regenerateCaptionForImage,
     deleteImage, 
+    deleteImages,
     clearGallery 
   } = useGallery();
+  const { settings } = useSettings();
 
   const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
   const [filters, setFilters] = useState<FilterOptions>({
     searchQuery: '',
-    sortBy: 'newest',
+    sortBy: settings.defaultSort || 'newest',
     tags: [],
     aspectRatio: 'all'
   });
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, sortBy: settings.defaultSort || 'newest' }));
+  }, [settings.defaultSort]);
 
   // Filter and sort images
   const filteredImages = useMemo(() => {
@@ -75,8 +82,8 @@ export const ImageGallery = () => {
         break;
       case 'size':
         result.sort((a, b) => {
-          const sizeA = a.metadata.width || 0 * (a.metadata.height || 0);
-          const sizeB = b.metadata.width || 0 * (b.metadata.height || 0);
+          const sizeA = (a.metadata.width || 0) * (a.metadata.height || 0);
+          const sizeB = (b.metadata.width || 0) * (b.metadata.height || 0);
           return sizeB - sizeA;
         });
         break;
@@ -117,9 +124,9 @@ export const ImageGallery = () => {
   }, []);
 
   const deleteSelected = useCallback(() => {
-    selectedImageIds.forEach(id => deleteImage(id));
+    deleteImages(Array.from(selectedImageIds));
     clearSelection();
-  }, [selectedImageIds, deleteImage, clearSelection]);
+  }, [selectedImageIds, deleteImages, clearSelection]);
 
   const handleReorderImages = useCallback((reorderedImages: GalleryImage[]) => {
     // Update the gallery with reordered images
@@ -209,6 +216,7 @@ export const ImageGallery = () => {
                   onRegenerateCaption={() => regenerateCaptionForImage(image.id)}
                   onDelete={() => deleteImage(image.id)}
                   onPreview={() => setSelectedImage(image)}
+                  showMetadata={settings.showMetadata}
                 />
               </div>
             ))}

@@ -17,14 +17,13 @@ A modern, AI-powered image gallery app that automatically generates titles, desc
 ## 🛠️ Tech Stack
 
 **Frontend:** React 18 + TypeScript | **Build:** Vite | **UI:** Tailwind CSS + shadcn/ui  
-**AI:** Google Gemini API | **Backend:** Supabase Edge Functions | **Icons:** Lucide React
+**AI:** Google Gemini API | **Backend:** Node.js + Express + SQLite (JWT) | **Icons:** Lucide React
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ or Bun
 - Google Gemini API Key
-- Supabase account (optional)
 
 ### Setup
 
@@ -37,8 +36,7 @@ cd image-muse
 npm install  # or: bun install
 
 # Create .env.local with your API keys
-VITE_SUPABASE_URL=your-url
-VITE_SUPABASE_PUBLISHABLE_KEY=your-key
+VITE_API_BASE_URL=http://localhost:4000
 VITE_GEMINI_API_KEY=your-gemini-key
 VITE_UNSPLASH_API_KEY=your-unsplash-key
 
@@ -46,7 +44,25 @@ VITE_UNSPLASH_API_KEY=your-unsplash-key
 npm run dev  # or: bun run dev
 ```
 
-App runs at: **http://localhost:8082**
+### Backend Setup
+
+```bash
+cd server
+npm install
+
+# Create server/.env
+PORT=4000
+JWT_SECRET=change-me
+GEMINI_API_KEY=your-gemini-key
+CORS_ORIGIN=http://localhost:8080
+DB_PATH=./data.db
+ADMIN_EMAILS=you@example.com
+
+# Start backend
+npm run dev
+```
+
+App runs at: **http://localhost:8080**
 
 ## 📦 Available Scripts
 
