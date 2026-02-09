@@ -262,9 +262,13 @@ export const useGallery = () => {
         const base64 = await fileToBase64(img.file!);
         const analysis = await analyzeImage(base64);
         const mergedTags = [...new Set([...img.tags, ...(analysis.tags || [])])];
-        const mergedMetadata = analysis.metadata
+        const rawMerged = analysis.metadata
           ? { ...img.metadata, ...analysis.metadata }
           : img.metadata;
+        const mergedMetadata: ImageMetadata = {
+          ...rawMerged,
+          iso: rawMerged.iso != null ? Number(rawMerged.iso) : undefined,
+        };
         const updatedTitle = analysis.title || img.title;
         const updatedDescription = analysis.description || 'No description available';
         const updatedCaption = analysis.caption || img.caption;
