@@ -20,6 +20,7 @@ import { ImageDetailPage } from "@/pages/ImageDetail";
 import { AuthProvider } from "@/context/AuthContext";
 import { FavoritesProvider } from "@/context/FavoritesContext";
 import { SettingsProvider } from "@/context/SettingsContext";
+import { SystemLogProvider } from "@/context/SystemLogContext";
 
 // ✅ Better React Query defaults
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ const App = () => {
         <AuthProvider>
             <FavoritesProvider>
                 <SettingsProvider>
+                    <SystemLogProvider>
                     <TooltipProvider>
                         <Toaster />
                         <Sonner />
@@ -69,6 +71,7 @@ const App = () => {
                         </BrowserRouter>
                         </div>
                     </TooltipProvider>
+                    </SystemLogProvider>
                 </SettingsProvider>
             </FavoritesProvider>
         </AuthProvider>
