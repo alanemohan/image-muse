@@ -26,9 +26,31 @@ if (!process.env.GEMINI_API_KEY) {
 
 const db = createDatabase(process.env.DB_PATH || "./data.db");
 
+const validateOrigin = (origin) => {
+  if (origin === "*") return false;
+  try {
+    const url = new URL(origin);
+    if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
+      console.warn(`CORS: Rejecting non-HTTPS origin in production: ${origin}`);
+      return false;
+    }
+    return true;
+  } catch {
+    console.warn(`CORS: Rejecting invalid origin: ${origin}`);
+    return false;
+  }
+};
+
 const corsOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean).filter(validateOrigin)
   : ["http://localhost:8080", "http://localhost:5173", "http://localhost:3000"];
+
+if (corsOrigins.length === 0) {
+  console.error("FATAL: No valid CORS origins configured. Set CORS_ORIGIN env var.");
+  process.exit(1);
+}
+
+console.log("CORS enabled for origins:", corsOrigins);
 
 app.use(
   cors({
