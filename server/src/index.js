@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -19,7 +20,11 @@ dotenv.config({ path: envPath });
 
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === "change-me") {
+  console.error("FATAL: JWT_SECRET must be set to a secure random value. Generate one with: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"");
+  process.exit(1);
+}
 
 if (!process.env.GEMINI_API_KEY) {
   console.warn("GEMINI_API_KEY is not set. /analyze-image will return 503.");
@@ -58,7 +63,31 @@ app.use(
     origin: corsOrigins,
   })
 );
-app.use(express.json({ limit: "25mb" }));
+
+// Rate limiters for sensitive endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: "Too many authentication attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn("Rate limit exceeded:", { ip: req.ip, path: req.path });
+    res.status(429).json({ error: "Too many authentication attempts. Please try again later." });
+  },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 15,
+  message: { error: "Rate limit exceeded for AI services. Please try again shortly." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn("AI rate limit exceeded:", { ip: req.ip, path: req.path });
+    res.status(429).json({ error: "Rate limit exceeded for AI services. Please try again shortly." });
+  },
+});
 
 const uploadRoot = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadRoot)) {
@@ -216,7 +245,7 @@ const authSchema = z.object({
   password: z.string().min(6),
 });
 
-app.post("/auth/signup", async (req, res) => {
+app.post("/auth/signup", authLimiter, async (req, res) => {
   const parsed = authSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid email or password" });
@@ -256,7 +285,7 @@ app.post("/auth/signup", async (req, res) => {
   });
 });
 
-app.post("/auth/signin", async (req, res) => {
+app.post("/auth/signin", authLimiter, async (req, res) => {
   const parsed = authSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid email or password" });
@@ -354,7 +383,7 @@ const analyzeSchema = z.object({
   type: z.enum(["analyze", "regenerate_caption"]).optional(),
 });
 
-app.post("/analyze-image", authMiddleware, async (req, res) => {
+app.post("/analyze-image", authMiddleware, aiLimiter, async (req, res) => {
   const parsed = analyzeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Image data is required" });
@@ -701,7 +730,7 @@ const chatSchema = z.object({
     .optional(),
 });
 
-app.post("/ai-chat", authMiddleware, async (req, res) => {
+app.post("/ai-chat", authMiddleware, aiLimiter, async (req, res) => {
   const parsed = chatSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid chat payload" });
