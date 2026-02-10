@@ -267,24 +267,10 @@ const Settings = () => {
                 <div>
                     <h3 className="text-sm font-semibold text-slate-300 mb-2">Gemini API Key</h3>
                     <p className="text-sm text-slate-400 mb-3">
-                        Enter your Google Gemini API key to enable AI features.
+                        The Gemini API key is configured server-side via the <code className="text-cyan-400">GEMINI_API_KEY</code> environment variable in <code className="text-cyan-400">server/.env</code>.
                     </p>
-                    <div className="flex gap-2">
-                        <input 
-                            type="password" 
-                            placeholder="AIzaSy..."
-                            className="bg-black/50 border border-slate-700 rounded px-3 py-2 text-sm text-white flex-1"
-                            onChange={(e) => {
-                                localStorage.setItem('gemini_api_key', e.target.value);
-                            }}
-                            defaultValue={localStorage.getItem('gemini_api_key') || ''}
-                        />
-                        <Button variant="secondary" onClick={() => window.location.reload()}>
-                            Save
-                        </Button>
-                    </div>
-                    <p className="text-xs text-slate-500 mt-2">
-                      This key is stored locally in your browser. The server also supports a global key via `server/.env`.
+                    <p className="text-xs text-slate-500">
+                      Contact your administrator to update the API key.
                     </p>
                 </div>
             </CardContent>
