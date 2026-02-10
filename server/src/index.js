@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import crypto from "crypto";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -75,7 +76,7 @@ const uploadStorage = multer.diskStorage({
   },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
-    const safeName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    const safeName = `${crypto.randomBytes(32).toString("hex")}${ext}`;
     cb(null, safeName);
   },
 });
@@ -92,31 +93,25 @@ const upload = multer({
   },
 });
 
+// Serve uploads with short-lived, file-specific signed tokens
 app.get("/uploads/:userId/:filename", (req, res) => {
   const { userId, filename } = req.params;
-
-  // Support auth via header or query param (for <img> tags)
-  const header = req.headers.authorization || "";
-  const headerToken = header.startsWith("Bearer ") ? header.slice(7) : null;
-  const token = headerToken || req.query.token;
+  const token = req.query.token;
 
   if (!token) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  let user;
+  let payload;
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    user = db.getUserById(payload.sub);
+    payload = jwt.verify(token, JWT_SECRET);
   } catch {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!user) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  if (user.id !== userId && !user.is_admin) {
+  // Verify the token is a file-specific token for this exact path
+  const expectedFile = `${userId}/${filename}`;
+  if (payload.file !== expectedFile) {
     return res.status(403).json({ error: "Access denied" });
   }
 
@@ -132,6 +127,33 @@ app.get("/uploads/:userId/:filename", (req, res) => {
   }
 
   res.sendFile(filePath);
+});
+
+// Endpoint to generate short-lived signed URLs for images
+app.post("/uploads/sign-urls", authMiddleware, (req, res) => {
+  const { paths } = req.body;
+  if (!Array.isArray(paths)) {
+    return res.status(400).json({ error: "paths array is required" });
+  }
+
+  const signed = {};
+  for (const filePath of paths) {
+    if (typeof filePath !== "string") continue;
+    // Extract userId from path like "/uploads/userId/filename"
+    const match = filePath.match(/^\/uploads\/([^/]+)\/([^/]+)$/);
+    if (!match) continue;
+    const [, fileUserId, fileName] = match;
+    // Only sign URLs for files the user owns (or admin)
+    if (req.user.id !== fileUserId && !req.user.is_admin) continue;
+    const fileToken = jwt.sign(
+      { sub: req.user.id, file: `${fileUserId}/${fileName}` },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+    signed[filePath] = `/uploads/${fileUserId}/${fileName}?token=${encodeURIComponent(fileToken)}`;
+  }
+
+  return res.json({ urls: signed });
 });
 
 const signToken = (user) => {
@@ -242,12 +264,11 @@ app.post("/auth/signin", async (req, res) => {
 
   const { email, password } = parsed.data;
   const user = db.getUserByEmail(email);
-  if (!user) {
-    return res.status(401).json({ error: "Invalid email or password" });
-  }
+  // Always run bcrypt compare to prevent timing-based user enumeration
+  const hash = user?.password_hash || "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012";
+  const isValid = await bcrypt.compare(password, hash);
 
-  const isValid = await bcrypt.compare(password, user.password_hash);
-  if (!isValid) {
+  if (!user || !isValid) {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
@@ -340,6 +361,19 @@ app.post("/analyze-image", authMiddleware, async (req, res) => {
   }
 
   const { imageBase64, type = "analyze" } = parsed.data;
+
+  // Validate base64 image size (max ~10MB)
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+  if (imageBase64.length > MAX_IMAGE_SIZE) {
+    return res.status(400).json({ error: "Image too large. Maximum size is 10MB." });
+  }
+
+  // Validate base64 image format
+  const base64FormatRegex = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
+  if (imageBase64.includes(",") && !base64FormatRegex.test(imageBase64)) {
+    return res.status(400).json({ error: "Invalid image format." });
+  }
+
   const geminiKey = getGeminiKey(req);
 
   if (!geminiKey) {
@@ -405,23 +439,15 @@ Return ONLY valid JSON, no markdown formatting.`;
   if (!response.ok) {
     const errorText = await response.text();
     console.error("AI gateway error:", response.status, errorText);
-
-    if (response.status === 429) {
-      return res.status(429).json({
-        error: "Rate limit exceeded. Please try again in a moment.",
-        statusCode: 429,
-      });
-    }
-    if (response.status === 402) {
-      return res.status(402).json({
-        error: "AI credits exhausted. Please add credits to continue.",
-        statusCode: 402,
-      });
-    }
-
-    return res.status(response.status).json({
-      error: `AI service error: ${response.status}. Please try again later.`,
+    logAiError(req, {
+      type: "analyze-image",
       statusCode: response.status,
+      message: "AI gateway error",
+      raw: errorText,
+    });
+
+    return res.status(503).json({
+      error: "Analysis service temporarily unavailable. Please try again later.",
     });
   }
 
@@ -737,22 +763,8 @@ app.post("/ai-chat", authMiddleware, async (req, res) => {
       raw: errorText,
     });
 
-    if (response.status === 429) {
-      return res.status(429).json({
-        error: "Rate limit exceeded. Please try again in a moment.",
-        statusCode: 429,
-      });
-    }
-    if (response.status === 402) {
-      return res.status(402).json({
-        error: "AI credits exhausted. Please add credits to continue.",
-        statusCode: 402,
-      });
-    }
-
-    return res.status(response.status).json({
-      error: `AI service error: ${response.status}. Please try again later.`,
-      statusCode: response.status,
+    return res.status(503).json({
+      error: "AI service temporarily unavailable. Please try again later.",
     });
   }
 
