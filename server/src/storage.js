@@ -134,7 +134,8 @@ export const createDatabase = (dbPath) => {
       `UPDATE users
        SET full_name = @full_name,
            avatar_url = @avatar_url,
-           last_sign_in_at = @last_sign_in_at
+           last_sign_in_at = @last_sign_in_at,
+           is_admin = @is_admin
        WHERE id = @id`
     ).run(updated);
 
