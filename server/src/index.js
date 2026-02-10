@@ -26,14 +26,13 @@ if (!process.env.GEMINI_API_KEY) {
 
 const db = createDatabase(process.env.DB_PATH || "./data.db");
 
-const corsOrigins = (process.env.CORS_ORIGIN || "*")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : ["http://localhost:8080", "http://localhost:5173", "http://localhost:3000"];
 
 app.use(
   cors({
-    origin: corsOrigins.includes("*") ? "*" : corsOrigins,
+    origin: corsOrigins,
   })
 );
 app.use(express.json({ limit: "25mb" }));
@@ -71,7 +70,47 @@ const upload = multer({
   },
 });
 
-app.use("/uploads", express.static(uploadRoot));
+app.get("/uploads/:userId/:filename", (req, res) => {
+  const { userId, filename } = req.params;
+
+  // Support auth via header or query param (for <img> tags)
+  const header = req.headers.authorization || "";
+  const headerToken = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = headerToken || req.query.token;
+
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  let user;
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    user = db.getUserById(payload.sub);
+  } catch {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (!user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  if (user.id !== userId && !user.is_admin) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  const safeName = path.basename(filename);
+  const filePath = path.join(uploadRoot, userId, safeName);
+
+  if (!filePath.startsWith(uploadRoot)) {
+    return res.status(400).json({ error: "Invalid file path" });
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  res.sendFile(filePath);
+});
 
 const signToken = (user) => {
   return jwt.sign(
@@ -272,7 +311,7 @@ const analyzeSchema = z.object({
   type: z.enum(["analyze", "regenerate_caption"]).optional(),
 });
 
-app.post("/analyze-image", async (req, res) => {
+app.post("/analyze-image", authMiddleware, async (req, res) => {
   const parsed = analyzeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Image data is required" });
@@ -614,7 +653,7 @@ const chatSchema = z.object({
     .optional(),
 });
 
-app.post("/ai-chat", async (req, res) => {
+app.post("/ai-chat", authMiddleware, async (req, res) => {
   const parsed = chatSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid chat payload" });

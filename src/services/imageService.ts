@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient";
+import { apiFetch, getAuthToken } from "./apiClient";
 import { GalleryImage, ImageMetadata } from "@/types/gallery";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
@@ -32,7 +32,9 @@ export type ImageUpdatePayload = Partial<ImagePayload>;
 
 const normalizeUrl = (url: string) => {
   if (url.startsWith("/uploads/")) {
-    return `${API_BASE_URL}${url}`;
+    const token = getAuthToken();
+    const base = `${API_BASE_URL}${url}`;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   }
   return url;
 };
