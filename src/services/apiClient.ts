@@ -76,6 +76,12 @@ export const apiFetch = async <T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> => {
+  if (!API_BASE_URL && !import.meta.env.DEV) {
+    throw new Error(
+      "API base URL is not configured. Set VITE_API_BASE_URL to your backend URL."
+    );
+  }
+
   const token = getAuthToken();
   const headers = new Headers(options.headers);
 
