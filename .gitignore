@@ -16,10 +16,22 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!server/.env.example
 
 # Uploads
 uploads
 server/uploads
+
+# Local databases / runtime state
+*.db
+*.db-shm
+*.db-wal
+
+# Local temp files
+tmpclaude-*-cwd
+nul
 
 # Editor directories and files
 .vscode/*
