@@ -1,87 +1,80 @@
-# 🖼️ Image Muse - AI Image Gallery (v2.0)
+# Image Muse
 
-A modern, AI-powered image gallery app that automatically generates titles, descriptions, and captions using Google Gemini. Upload images, extract metadata, search, edit, and download with watermarks.
+AI-powered image gallery with multi-provider fallback and API-driven discovery pages.
 
-## ✨ Key Features
+## Stack
+- Frontend: React + JavaScript + Vite + Tailwind CSS
+- Backend: Node.js + Express + SQLite
+- Auth: JWT
+- AI Providers: Gemini, OpenRouter, HuggingFace, local fallback
 
-- **Smart Image Upload** - Drag-and-drop multiple images (JPG, PNG, GIF, WebP)
-- **AI-Powered Captions** - Auto-generate titles & descriptions with Google Gemini
-- **EXIF Metadata** - Extract camera info, ISO, focal length, GPS coordinates
-- **Advanced Search** - Filter by title, description, caption, or aspect ratio
-- **Image Editing** - Inline editing with regenerate AI captions
-- **Watermark Download** - Download images with custom watermark overlay
-- **Dark Mode UI** - Glassmorphism design with smooth animations
-- **Local Storage** - Persistent gallery using browser storage
-- **Fully Responsive** - Works on mobile, tablet, and desktop
+## Core Features
+- Secure signup/signin with profile and settings
+- Image upload and gallery management
+- AI title/description/caption generation with provider fallback
+- Favorites, admin logs, and provider status monitoring
+- Explore page (NASA APOD + NASA Image Library)
+- Pulse page (Open-Meteo + Spaceflight News)
+- AI Hub page (provider health and fallback visibility)
 
-## 🛠️ Tech Stack
+## Routes
+- `/` Gallery
+- `/explore` Free API discovery
+- `/pulse` Live weather + space news
+- `/ai-hub` AI provider status
+- `/favorites`, `/profile`, `/settings`, `/about`
 
-**Frontend:** React 18 + TypeScript | **Build:** Vite | **UI:** Tailwind CSS + shadcn/ui  
-**AI:** Google Gemini API | **Backend:** Node.js + Express + SQLite (JWT) | **Icons:** Lucide React
+## Local Setup
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+ or Bun
-- Google Gemini API Key
-
-### Setup
-
+### 1) Install
 ```bash
-# Clone repo
-git clone https://github.com/yourusername/image-muse.git
-cd image-muse
-
-# Install dependencies
-npm install  # or: bun install
-
-# Create .env.local with your API keys
-VITE_API_BASE_URL=http://localhost:4000
-VITE_GEMINI_API_KEY=your-gemini-key
-VITE_UNSPLASH_API_KEY=your-unsplash-key
-
-# Start dev server
-npm run dev  # or: bun run dev
+npm install
+npm --prefix server install
 ```
 
-### Backend Setup
+### 2) Configure frontend env (`.env`)
+```env
+VITE_API_BASE_URL=http://localhost:4000
+VITE_NASA_API_KEY=DEMO_KEY
+```
 
-```bash
-cd server
-npm install
-
-# Create server/.env
+### 3) Configure backend env (`server/.env`)
+```env
 PORT=4000
-JWT_SECRET=change-me
-GEMINI_API_KEY=your-gemini-key
-CORS_ORIGIN=http://localhost:8080
+JWT_SECRET=replace-with-long-random-secret
 DB_PATH=./data.db
-ADMIN_EMAILS=you@example.com
+CORS_ORIGIN=http://localhost:5173
+ADMIN_EMAILS=
 
-# Start backend
+GEMINI_API_KEY=
+OPENROUTER_API_KEY=
+HUGGINGFACE_API_KEY=
+
+GEMINI_MODELS=gemini-2.5-flash,gemini-2.0-flash
+OPENROUTER_MODEL=meta-llama/llama-3.2-11b-vision-instruct:free
+HUGGINGFACE_VISION_MODEL=Salesforce/blip-image-captioning-large
+OPENROUTER_SITE_URL=http://localhost:5173
+```
+
+### 4) Run
+```bash
+# terminal 1
+npm --prefix server run dev
+
+# terminal 2
 npm run dev
 ```
 
-App runs at: **http://localhost:8080**
+Frontend usually runs on `http://localhost:5173` and backend on `http://localhost:4000`.
 
-## 📦 Available Scripts
-
+## Scripts
 ```bash
-npm run build      # Production build
-npm run preview    # Preview production build
-npm run lint       # Run ESLint
-npm run test       # Run tests
-npm run test:watch # Watch mode tests
+npm run lint
+npm run test
+npm run build
 ```
 
-## 🔐 Security
-
-- ✅ All API keys in `.env.local` (ignored by Git)
-- ✅ No sensitive data in source code
-- ✅ Environment variables for configuration
-- ✅ `.gitignore` properly configured
-- ✅ Safe to push to GitHub
-
-## 📝 License
-
-MIT License - feel free to use this project!
+## Notes
+- Settings page stores OpenRouter and HuggingFace keys in localStorage for local development.
+- If a provider fails or is rate-limited, backend automatically tries the next provider.
+- `.env` files must stay local only; commit only `.env.example` files.

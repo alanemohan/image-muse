@@ -1,106 +1,156 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { GalleryImage } from '@/types/gallery';
-import { useAuth } from '@/context/AuthContext';
-import { addFavorite as addFavoriteRemote, listFavorites, removeFavorite as removeFavoriteRemote } from '@/services/favoritesService';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
+import { GalleryImage } from "@/types/gallery";
+import {
+  listFavorites as listRemoteFavorites,
+  addFavorite as addRemoteFavorite,
+  removeFavorite as removeRemoteFavorite,
+} from "@/services/favoritesService";
+import { useAuth } from "@/context/AuthContext";
 
 interface FavoritesContextType {
   favorites: GalleryImage[];
-  addFavorite: (image: GalleryImage) => void | Promise<void>;
-  removeFavorite: (imageId: string) => void | Promise<void>;
+  addFavorite: (image: GalleryImage) => void;
+  removeFavorite: (imageId: string) => void;
   isFavorite: (imageId: string) => boolean;
   toggleFavorite: (image: GalleryImage) => void;
 }
 
-const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
+const FavoritesContext = createContext<FavoritesContextType | undefined>(
+  undefined
+);
 
-export const FavoritesProvider = ({ children }: { children: React.ReactNode }) => {
+const STORAGE_KEY = "favorites";
+
+/* ----------------------------- */
+/* Helpers                       */
+/* ----------------------------- */
+
+const safeLoadFavorites = (): GalleryImage[] => {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    localStorage.removeItem(STORAGE_KEY);
+    return [];
+  }
+};
+
+export const FavoritesProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const { user } = useAuth();
   const isServerMode = Boolean(user);
   const [favorites, setFavorites] = useState<GalleryImage[]>([]);
 
+  /* ----------------------------- */
+  /* Load on mount                 */
+  /* ----------------------------- */
+
   useEffect(() => {
     let active = true;
+
     const load = async () => {
       if (isServerMode) {
         try {
-          const items = await listFavorites();
-          if (active) setFavorites(items);
-        } catch (error) {
-          console.error("Failed to load favorites:", error);
+          const remote = await listRemoteFavorites();
+          if (active) setFavorites(remote);
+          return;
+        } catch {
           if (active) setFavorites([]);
-        }
-      } else {
-        const saved = localStorage.getItem('favorites');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            setFavorites(parsed.map((img: any) => ({
-              ...img,
-              createdAt: new Date(img.createdAt),
-              file: null,
-              isPersisted: false,
-            })));
-          } catch (error) {
-            console.error("Failed to parse favorites:", error);
-            setFavorites([]);
-          }
-        } else {
-          setFavorites([]);
+          return;
         }
       }
+
+      if (active) setFavorites(safeLoadFavorites());
     };
 
     void load();
+
     return () => {
       active = false;
     };
   }, [isServerMode]);
 
+  /* ----------------------------- */
+  /* Persist changes               */
+  /* ----------------------------- */
+
   useEffect(() => {
-    if (!isServerMode) {
-      localStorage.setItem('favorites', JSON.stringify(favorites));
-    }
+    if (isServerMode) return;
+    if (typeof window === "undefined") return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(favorites));
   }, [favorites, isServerMode]);
 
-  const addFavorite = async (image: GalleryImage) => {
-    setFavorites(prev => {
-      if (prev.some(img => img.id === image.id)) return prev;
-      return [...prev, image];
-    });
+  /* ----------------------------- */
+  /* Actions                       */
+  /* ----------------------------- */
+
+  const addFavorite = useCallback((image: GalleryImage) => {
+    setFavorites((prev) =>
+      prev.some((img) => img.id === image.id)
+        ? prev
+        : [...prev, image]
+    );
+
     if (isServerMode) {
-      try {
-        await addFavoriteRemote(image.id);
-      } catch (error) {
-        console.error("Failed to add favorite:", error);
-      }
+      void addRemoteFavorite(image.id).catch(() => undefined);
     }
-  };
+  }, [isServerMode]);
 
-  const removeFavorite = async (imageId: string) => {
-    setFavorites(prev => prev.filter(img => img.id !== imageId));
+  const removeFavorite = useCallback((imageId: string) => {
+    setFavorites((prev) => prev.filter((img) => img.id !== imageId));
+
     if (isServerMode) {
-      try {
-        await removeFavoriteRemote(imageId);
-      } catch (error) {
-        console.error("Failed to remove favorite:", error);
-      }
+      void removeRemoteFavorite(imageId).catch(() => undefined);
     }
-  };
+  }, [isServerMode]);
 
-  const isFavorite = (imageId: string) => {
-    return favorites.some(img => img.id === imageId);
-  };
+  const isFavorite = useCallback(
+    (imageId: string) => favorites.some((img) => img.id === imageId),
+    [favorites]
+  );
 
-  const toggleFavorite = (image: GalleryImage) => {
-    if (isFavorite(image.id)) {
-      removeFavorite(image.id);
-    } else {
-      addFavorite(image);
-    }
-  };
+  const toggleFavorite = useCallback(
+    (image: GalleryImage) => {
+      setFavorites((prev) =>
+        prev.some((img) => img.id === image.id)
+          ? prev.filter((img) => img.id !== image.id)
+          : [...prev, image]
+      );
+    },
+    []
+  );
+
+  /* ----------------------------- */
+  /* Context value                 */
+  /* ----------------------------- */
+
+  const value = useMemo(
+    () => ({
+      favorites,
+      addFavorite,
+      removeFavorite,
+      isFavorite,
+      toggleFavorite,
+    }),
+    [favorites, addFavorite, removeFavorite, isFavorite, toggleFavorite]
+  );
 
   return (
-    <FavoritesContext.Provider value={{ favorites, addFavorite, removeFavorite, isFavorite, toggleFavorite }}>
+    <FavoritesContext.Provider value={value}>
       {children}
     </FavoritesContext.Provider>
   );
@@ -108,8 +158,10 @@ export const FavoritesProvider = ({ children }: { children: React.ReactNode }) =
 
 export const useFavorites = () => {
   const context = useContext(FavoritesContext);
-  if (context === undefined) {
-    throw new Error('useFavorites must be used within a FavoritesProvider');
+  if (!context) {
+    throw new Error(
+      "useFavorites must be used within a FavoritesProvider"
+    );
   }
   return context;
 };

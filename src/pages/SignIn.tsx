@@ -30,8 +30,10 @@ const SignIn = () => {
 
       toast.success("Signed in successfully!");
       navigate("/");
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to sign in";
+      toast.error(message);
     } finally {
       setLoading(false);
     }

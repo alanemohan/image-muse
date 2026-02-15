@@ -206,7 +206,6 @@ export const ImageCarousel = ({
         <div className="confidence-bar">
           <div
             className="confidence-fill transition-all duration-300"
-            // eslint-disable-next-line react/forbid-component-props
             style={{
               width: `${((currentIndex + 1) / images.length) * 100}%`
             }}

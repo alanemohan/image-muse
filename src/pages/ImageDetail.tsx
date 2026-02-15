@@ -10,7 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { analyzeImage, urlToBase64 } from '@/services/imageAnalysis';
 import { useAuth } from '@/context/AuthContext';
 import { listImages } from '@/services/imageService';
-import { GalleryImage } from '@/types/gallery';
+import { AIAnalysisResult, GalleryImage } from '@/types/gallery';
+
+type StoredImageShape = Partial<GalleryImage> & {
+  id?: string;
+  createdAt?: string | Date;
+};
+
+const matchesImageId = (value: unknown, imageId: string): value is StoredImageShape => {
+  if (typeof value !== "object" || value === null) return false;
+  return (value as { id?: unknown }).id === imageId;
+};
 
 export const ImageDetailPage = () => {
   const { id } = useParams();
@@ -24,7 +34,7 @@ export const ImageDetailPage = () => {
   // Real Data State
   const image = location.state?.image as GalleryImage | undefined;
   const [resolvedImage, setResolvedImage] = useState<GalleryImage | null>(image || null);
-  const [analysisData, setAnalysisData] = useState<any>(null);
+  const [analysisData, setAnalysisData] = useState<AIAnalysisResult | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -43,12 +53,20 @@ export const ImageDetailPage = () => {
         const stored = localStorage.getItem('gallery-images-v2');
         if (stored) {
           try {
-            const parsed = JSON.parse(stored);
-            const found = parsed.find((img: any) => img.id === id);
+            const parsed: unknown = JSON.parse(stored);
+            const found = Array.isArray(parsed)
+              ? parsed.find((entry) => matchesImageId(entry, id))
+              : undefined;
+
             if (active && found) {
+              const createdAt =
+                found.createdAt instanceof Date
+                  ? found.createdAt
+                  : new Date(found.createdAt ?? new Date().toISOString());
+
               setResolvedImage({
-                ...found,
-                createdAt: new Date(found.createdAt),
+                ...(found as GalleryImage),
+                createdAt,
                 file: null,
                 isAnalyzing: false,
               });

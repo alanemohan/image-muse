@@ -1,28 +1,68 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
-export type ApiError = Error & { status?: number };
-
-const AUTH_EVENT = "auth-changed";
-
-export const getAuthToken = () => localStorage.getItem("auth_token");
-
-export const setAuthToken = (token: string | null) => {
-  if (token) {
-    localStorage.setItem("auth_token", token);
-  } else {
-    localStorage.removeItem("auth_token");
-  }
-  window.dispatchEvent(new Event(AUTH_EVENT));
+export type ApiError = Error & {
+  status?: number;
+  data?: unknown;
 };
 
-export const onAuthChange = (handler: () => void) => {
+const readErrorMessage = (payload: unknown): string | null => {
+  if (!payload || typeof payload !== "object") return null;
+
+  const source = payload as { message?: unknown; error?: unknown };
+  if (typeof source.message === "string" && source.message.trim()) {
+    return source.message;
+  }
+
+  if (typeof source.error === "string" && source.error.trim()) {
+    return source.error;
+  }
+
+  return null;
+};
+
+const AUTH_EVENT = "app:auth-changed";
+const REQUEST_TIMEOUT = 15_000; // 15s
+
+/* ----------------------------- */
+/* Auth token helpers            */
+/* ----------------------------- */
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem("auth_token");
+  } catch {
+    return null;
+  }
+};
+
+export const setAuthToken = (token: string | null): void => {
+  try {
+    if (token) {
+      localStorage.setItem("auth_token", token);
+    } else {
+      localStorage.removeItem("auth_token");
+    }
+  } finally {
+    window.dispatchEvent(new Event(AUTH_EVENT));
+  }
+};
+
+export const onAuthChange = (handler: () => void): (() => void) => {
   window.addEventListener(AUTH_EVENT, handler);
   return () => window.removeEventListener(AUTH_EVENT, handler);
 };
 
-export const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+/* ----------------------------- */
+/* API fetch wrapper             */
+/* ----------------------------- */
+
+export const apiFetch = async <T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> => {
   const token = getAuthToken();
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(options.headers);
 
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
@@ -32,17 +72,46 @@ export const apiFetch = async <T>(path: string, options: RequestInit = {}): Prom
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
-  const isJson = response.headers.get("content-type")?.includes("application/json");
-  const data = isJson ? await response.json() : null;
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw new Error("Network request failed");
+  }
+
+  clearTimeout(timeoutId);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = contentType.includes("application/json");
+
+  const data = isJson
+    ? await response.json().catch(() => null)
+    : null;
 
   if (!response.ok) {
-    const error = new Error(data?.error || "Request failed") as ApiError;
+    if (response.status === 401 && token) {
+      setAuthToken(null);
+    }
+
+    const errorMessage = readErrorMessage(data);
+    const error = new Error(
+      errorMessage ||
+        response.statusText ||
+        "Request failed"
+    ) as ApiError;
+
     error.status = response.status;
+    error.data = data;
+
     throw error;
   }
 

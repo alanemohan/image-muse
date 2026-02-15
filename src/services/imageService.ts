@@ -81,6 +81,7 @@ const normalizeUrl = (url: string, signedUrls?: Record<string, string>) => {
 
 export const mapServerImage = (image: ServerImage, signedUrls?: Record<string, string>): GalleryImage => ({
   id: image.id,
+  source: { type: "remote", file: null },
   file: null,
   url: normalizeUrl(image.url, signedUrls),
   name: image.name,
@@ -91,7 +92,6 @@ export const mapServerImage = (image: ServerImage, signedUrls?: Record<string, s
   createdAt: new Date(image.created_at),
   tags: image.tags || [],
   isAnalyzing: false,
-  isPersisted: true,
 });
 
 export const listImages = async (): Promise<GalleryImage[]> => {
