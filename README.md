@@ -67,6 +67,22 @@ npm run dev
 
 Frontend usually runs on `http://localhost:5173` and backend on `http://localhost:4000`.
 
+## Deploy (Vercel + Backend)
+1. Deploy backend separately (Railway/Render/Fly/VM). Get a public backend URL, e.g. `https://image-muse-api.onrender.com`.
+2. In Vercel project settings, add frontend env:
+```env
+VITE_API_BASE_URL=https://your-backend-domain
+VITE_NASA_API_KEY=DEMO_KEY
+```
+3. In backend env, set CORS and site URL:
+```env
+CORS_ORIGIN=https://your-vercel-domain.vercel.app
+OPENROUTER_SITE_URL=https://your-vercel-domain.vercel.app
+```
+4. Redeploy both frontend and backend after env changes.
+
+If you see `ERR_BLOCKED_BY_CLIENT`, disable ad-block/privacy extensions for your site and verify requests are not targeting `localhost` in production.
+
 ## Scripts
 ```bash
 npm run lint
