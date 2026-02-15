@@ -33,8 +33,9 @@ const Profile = () => {
         setUser(updated);
         toast.success("Profile updated successfully!");
         setIsEditing(false);
-    } catch (error: any) {
-        toast.error("Error updating profile: " + error.message);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        toast.error("Error updating profile: " + message);
     } finally {
         setLoading(false);
     }

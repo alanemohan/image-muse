@@ -1,107 +1,126 @@
-import { useState, useCallback, useEffect } from 'react';
-import { GalleryImage, ImageMetadata } from '@/types/gallery';
-import { useImageMetadata } from './useImageMetadata';
-import { analyzeImage, fileToBase64, urlToBase64, regenerateCaption, APIError } from '@/services/imageAnalysis';
-import { toast } from '@/hooks/use-toast';
-import { useAuth } from '@/context/AuthContext';
-import { useSettings } from '@/context/SettingsContext';
-import { bulkDeleteImages, createImage, deleteImage as deleteImageRemote, listImages, updateImage as updateImageRemote, uploadImage } from '@/services/imageService';
+import { useState, useCallback, useEffect, useRef } from "react";
+import { GalleryImage, ImageMetadata } from "@/types/gallery";
+import { useImageMetadata } from "./useImageMetadata";
+import {
+  analyzeImage,
+  fileToBase64,
+  urlToBase64,
+  regenerateCaption,
+  APIError,
+} from "@/services/imageAnalysis";
+import {
+  listImages,
+  uploadImage,
+  createImage,
+  updateImage,
+  deleteImage as deleteRemoteImage,
+  bulkDeleteImages,
+} from "@/services/imageService";
+import { useAuth } from "@/context/AuthContext";
+import { toast } from "@/hooks/use-toast";
 
-const STORAGE_KEY = 'gallery-images-v2';
+const STORAGE_KEY = "gallery-images-v2";
 
-// Generate fallback caption based on metadata
-const generateFallbackCaption = (filename: string, metadata: ImageMetadata): string => {
+const createId = () => `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+
+const toDate = (value: Date | string) =>
+  value instanceof Date ? value : new Date(value);
+
+const generateFallbackCaption = (
+  filename: string,
+  metadata: ImageMetadata
+): string => {
   const parts: string[] = [];
-  
+
   if (metadata.make && metadata.model) {
     parts.push(`Shot with ${metadata.make} ${metadata.model}`);
   }
-  
+
   if (metadata.focalLength && metadata.fNumber) {
     parts.push(`at ${metadata.focalLength} ${metadata.fNumber}`);
   }
-  
+
   if (metadata.dateTime) {
     parts.push(`on ${metadata.dateTime}`);
   }
 
-  if (parts.length === 0) {
-    const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-    return `Beautiful capture: ${cleanName}`;
+  if (!parts.length) {
+    return `Beautiful capture: ${filename
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[-_]/g, " ")}`;
   }
 
-  return parts.join(' ');
+  return parts.join(" ");
 };
 
-// Generate fallback description based on image characteristics
-const generateFallbackDescription = (metadata: ImageMetadata, filename: string): string => {
-  const parts: string[] = [];
-  
-  if (metadata.width && metadata.height) {
-    const ratio = metadata.width / metadata.height;
-    if (ratio > 1.5) parts.push('A stunning landscape photograph');
-    else if (ratio < 0.7) parts.push('A beautiful portrait image');
-    else parts.push('An interesting square composition');
-  } else {
-    parts.push('An interesting photograph');
-  }
-
-  if (metadata.iso && metadata.iso > 1600) {
-    parts.push('captured in low light conditions');
-  }
-
-  if (metadata.focalLength) {
-    const focal = parseInt(metadata.focalLength);
-    if (focal <= 35) parts.push('with a wide-angle perspective');
-    else if (focal >= 85) parts.push('with a telephoto lens');
-  }
-
-  const description = parts.join(' ');
-  return description || `A photograph from ${filename}. Edit this description to add more details.`;
-};
-
-// Generate tags from metadata
 const generateTags = (metadata: ImageMetadata): string[] => {
   const tags: string[] = [];
-  
+
   if (metadata.width && metadata.height) {
     const ratio = metadata.width / metadata.height;
-    if (ratio > 1.5) tags.push('Landscape');
-    else if (ratio < 0.7) tags.push('Portrait');
-    else tags.push('Square');
+    if (ratio > 1.5) tags.push("Landscape");
+    else if (ratio < 0.7) tags.push("Portrait");
+    else tags.push("Square");
   }
 
   if (metadata.make) tags.push(metadata.make);
-  if (metadata.iso && metadata.iso > 1600) tags.push('Low Light');
-  if (metadata.focalLength) {
-    const focal = parseInt(metadata.focalLength);
-    if (focal <= 35) tags.push('Wide Angle');
-    else if (focal >= 85) tags.push('Telephoto');
-  }
-  if (metadata.gpsLatitude) tags.push('Geotagged');
-  
+  if (metadata.iso && metadata.iso > 1600) tags.push("Low Light");
+  if (metadata.gpsLatitude) tags.push("Geotagged");
+
   return tags;
 };
+
+type StoredGalleryImage = Partial<GalleryImage> & { createdAt?: string | Date };
+
+const isStoredGalleryImage = (value: unknown): value is StoredGalleryImage =>
+  typeof value === "object" && value !== null;
+
+const normalizeStoredImages = (raw: unknown[]): GalleryImage[] =>
+  raw
+    .filter(isStoredGalleryImage)
+    .map((img) => ({
+      ...(img as GalleryImage),
+      createdAt: toDate(img.createdAt ?? new Date().toISOString()),
+      source: img.source ?? { type: "remote", file: null },
+      file: null,
+      isAnalyzing: false,
+    }));
 
 export const useGallery = () => {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { extractMetadata } = useImageMetadata();
   const { user } = useAuth();
-  const isServerMode = Boolean(user);
-  const { settings } = useSettings();
+  const isMounted = useRef(true);
 
-  // Load from backend (signed-in) or localStorage (guest)
+  const isServerMode = Boolean(user);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
+
     const load = async () => {
+      setIsLoading(true);
+
       if (isServerMode) {
-        setIsLoading(true);
         try {
-          const serverImages = await listImages();
-          if (active) setImages(serverImages);
-        } catch (e) {
-          console.error('Failed to load gallery from backend:', e);
+          const remoteImages = await listImages();
+          if (active) setImages(remoteImages);
+        } catch (error) {
+          if (active) setImages([]);
+          toast({
+            title: "Failed to load gallery",
+            description:
+              error instanceof Error
+                ? error.message
+                : "Unable to fetch images from backend",
+            variant: "destructive",
+          });
         } finally {
           if (active) setIsLoading(false);
         }
@@ -109,425 +128,302 @@ export const useGallery = () => {
       }
 
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (active) {
-            setImages(parsed.map((img: any) => ({
-              ...img,
-              createdAt: new Date(img.createdAt),
-              file: null,
-              isAnalyzing: false,
-              isPersisted: false,
-              // Use stored URL directly (it's already a full data URL)
-              url: img.url
-            })));
-          }
-        } catch (e) {
-          console.error('Failed to load gallery from storage:', e);
+      if (!stored) {
+        if (active) {
+          setImages([]);
+          setIsLoading(false);
         }
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stored);
+        if (active) setImages(normalizeStoredImages(parsed));
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
+        if (active) setImages([]);
+      } finally {
+        if (active) setIsLoading(false);
       }
     };
 
     void load();
+
     return () => {
       active = false;
     };
   }, [isServerMode]);
 
-  // Save to localStorage when images change (guest mode only)
   useEffect(() => {
     if (isServerMode) return;
 
-    if (images.length > 0) {
-      const toStore = images.map(img => ({
-        id: img.id,
-        name: img.name,
-        title: img.title,
-        description: img.description,
-        caption: img.caption,
-        metadata: img.metadata,
-        createdAt: img.createdAt,
-        tags: img.tags,
-        // Store the full data URL directly
-        url: img.url
-      }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
-    } else {
+    if (!images.length) {
       localStorage.removeItem(STORAGE_KEY);
+      return;
     }
+
+    const minimal = images.map(
+      ({ id, name, title, description, caption, metadata, createdAt, tags, url }) => ({
+        id,
+        name,
+        title,
+        description,
+        caption,
+        metadata,
+        createdAt,
+        tags,
+        url,
+        source: { type: "remote", file: null as null },
+      })
+    );
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(minimal));
   }, [images, isServerMode]);
 
-  const addImages = useCallback(async (files: FileList | File[]) => {
-    setIsLoading(true);
-    
-    const fileArray = Array.from(files);
-    const newImages: GalleryImage[] = [];
+  const addImages = useCallback(
+    async (files: FileList | File[]) => {
+      setIsLoading(true);
 
-    for (const file of fileArray) {
-      if (!file.type.startsWith('image/')) continue;
+      const fileArray = Array.from(files).filter((f) => f.type.startsWith("image/"));
 
-      const metadata = await extractMetadata(file);
-      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      const fallbackCaption = generateFallbackCaption(file.name, metadata);
-      const initialTags = generateTags(metadata);
-      let url = '';
-      
-      let imageData: GalleryImage = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        file,
-        url,
-        name: file.name,
-        title: cleanName,
-        description: 'Analyzing image...',
-        caption: fallbackCaption,
-        metadata,
-        createdAt: new Date(),
-        tags: initialTags,
-        isAnalyzing: true,
-        isPersisted: !isServerMode,
-      };
+      for (const file of fileArray) {
+        if (!isMounted.current) return;
+
+        const metadata = await extractMetadata(file);
+        const base64 = await fileToBase64(file);
+        const now = new Date();
+
+        const localDraft: GalleryImage = {
+          id: createId(),
+          source: { type: "local", file },
+          file,
+          url: base64,
+          name: file.name,
+          title: file.name.replace(/\.[^/.]+$/, ""),
+          description: "Analyzing image...",
+          caption: generateFallbackCaption(file.name, metadata),
+          metadata,
+          createdAt: now,
+          tags: generateTags(metadata),
+          isAnalyzing: true,
+        };
+
+        setImages((prev) => [localDraft, ...prev]);
+
+        let activeId = localDraft.id;
+
+        if (isServerMode) {
+          try {
+            const uploaded = await uploadImage(file);
+            const persisted = await createImage({
+              name: file.name,
+              url: uploaded.url,
+              file_path: uploaded.file_path,
+              title: localDraft.title,
+              description: localDraft.description,
+              caption: localDraft.caption,
+              metadata,
+              tags: localDraft.tags,
+            });
+
+            activeId = persisted.id;
+
+            setImages((prev) =>
+              prev.map((img) =>
+                img.id === localDraft.id
+                  ? {
+                      ...persisted,
+                      file,
+                      source: { type: "local", file },
+                      isAnalyzing: true,
+                    }
+                  : img
+              )
+            );
+          } catch (error) {
+            setImages((prev) => prev.filter((img) => img.id !== localDraft.id));
+            toast({
+              title: "Upload failed",
+              description:
+                error instanceof Error ? error.message : "Image upload failed",
+              variant: "destructive",
+            });
+            continue;
+          }
+        }
+
+        try {
+          const analysis = await analyzeImage(base64);
+
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === activeId
+                ? {
+                    ...img,
+                    title: analysis.title || img.title,
+                    description: analysis.description || "No description available",
+                    caption: analysis.caption || img.caption,
+                    tags: Array.from(new Set([...img.tags, ...(analysis.tags || [])])),
+                    isAnalyzing: false,
+                  }
+                : img
+            )
+          );
+
+          if (isServerMode) {
+            await updateImage(activeId, {
+              title: analysis.title,
+              description: analysis.description,
+              caption: analysis.caption,
+              tags: analysis.tags,
+            });
+          }
+
+          toast({
+            title: "Image analyzed",
+            description: `"${analysis.title}" processed successfully`,
+          });
+        } catch (error) {
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === activeId ? { ...img, isAnalyzing: false } : img
+            )
+          );
+
+          toast({
+            title: "Analysis failed",
+            description:
+              error instanceof APIError
+                ? error.message
+                : "Using metadata-based fallback",
+            variant: "destructive",
+          });
+        }
+      }
+
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
+    },
+    [extractMetadata, isServerMode]
+  );
+
+  const updateTitle = useCallback(
+    async (id: string, title: string) => {
+      setImages((prev) => prev.map((img) => (img.id === id ? { ...img, title } : img)));
+      if (isServerMode) {
+        try {
+          await updateImage(id, { title });
+        } catch (error) {
+          console.error("Failed to sync title update:", error);
+        }
+      }
+    },
+    [isServerMode]
+  );
+
+  const updateDescription = useCallback(
+    async (id: string, description: string) => {
+      setImages((prev) =>
+        prev.map((img) => (img.id === id ? { ...img, description } : img))
+      );
+      if (isServerMode) {
+        try {
+          await updateImage(id, { description });
+        } catch (error) {
+          console.error("Failed to sync description update:", error);
+        }
+      }
+    },
+    [isServerMode]
+  );
+
+  const updateCaption = useCallback(
+    async (id: string, caption: string) => {
+      setImages((prev) => prev.map((img) => (img.id === id ? { ...img, caption } : img)));
+      if (isServerMode) {
+        try {
+          await updateImage(id, { caption });
+        } catch (error) {
+          console.error("Failed to sync caption update:", error);
+        }
+      }
+    },
+    [isServerMode]
+  );
+
+  const regenerateCaptionForImage = useCallback(
+    async (id: string) => {
+      const image = images.find((i) => i.id === id);
+      if (!image) return;
+
+      setImages((prev) =>
+        prev.map((img) => (img.id === id ? { ...img, isAnalyzing: true } : img))
+      );
+
+      try {
+        const base64 = image.file
+          ? await fileToBase64(image.file)
+          : await urlToBase64(image.url);
+
+        const caption = await regenerateCaption(base64);
+
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === id ? { ...img, caption, isAnalyzing: false } : img
+          )
+        );
+
+        if (isServerMode) {
+          await updateImage(id, { caption });
+        }
+      } catch {
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === id ? { ...img, isAnalyzing: false } : img
+          )
+        );
+      }
+    },
+    [images, isServerMode]
+  );
+
+  const deleteImage = useCallback(
+    async (id: string) => {
+      setImages((prev) => prev.filter((img) => img.id !== id));
 
       if (isServerMode) {
         try {
-          const uploadResult = await uploadImage(file);
-          const uploadedUrl = uploadResult.url;
-
-          const created = await createImage({
-            name: file.name,
-            url: uploadedUrl,
-            file_path: uploadResult.file_path,
-            title: cleanName,
-            description: 'Analyzing image...',
-            caption: fallbackCaption,
-            metadata,
-            tags: initialTags,
-          });
-
-          imageData = {
-            ...created,
-            file,
-            metadata,
-            tags: created.tags,
-            isAnalyzing: true,
-            isPersisted: true,
-          };
+          await deleteRemoteImage(id);
         } catch (error) {
-          console.error('Failed to persist image:', error);
-          const fallbackUrl = await fileToBase64(file);
-          imageData = {
-            ...imageData,
-            url: fallbackUrl,
-            isPersisted: false,
-          };
           toast({
-            title: "Upload failed",
-            description: "Could not save to backend. The image will stay local for this session.",
-            variant: "destructive",
-          });
-        }
-      } else {
-        const fallbackUrl = await fileToBase64(file);
-        imageData = {
-          ...imageData,
-          url: fallbackUrl,
-        };
-      }
-      
-      newImages.push(imageData);
-    }
-
-    setImages(prev => [...newImages, ...prev]);
-    setIsLoading(false);
-
-    // Analyze images with AI in background
-    for (const img of newImages) {
-      if (!settings.autoAnalyze) {
-        const description = generateFallbackDescription(img.metadata, img.name);
-        setImages(prev => prev.map(i =>
-          i.id === img.id
-            ? { ...i, description, isAnalyzing: false }
-            : i
-        ));
-
-        if (isServerMode && img.isPersisted) {
-          void updateImageRemote(img.id, { description }).catch(error => {
-            console.error('Failed to update fallback description:', error);
-          });
-        }
-        continue;
-      }
-
-      try {
-        const base64 = await fileToBase64(img.file!);
-        const analysis = await analyzeImage(base64);
-        const mergedTags = [...new Set([...img.tags, ...(analysis.tags || [])])];
-        const rawMerged = analysis.metadata
-          ? { ...img.metadata, ...analysis.metadata }
-          : img.metadata;
-        const mergedMetadata: ImageMetadata = {
-          ...rawMerged,
-          iso: rawMerged.iso != null ? Number(rawMerged.iso) : undefined,
-        };
-        const updatedTitle = analysis.title || img.title;
-        const updatedDescription = analysis.description || 'No description available';
-        const updatedCaption = analysis.caption || img.caption;
-        
-        setImages(prev => prev.map(i => 
-          i.id === img.id 
-            ? { 
-                ...i, 
-                title: updatedTitle,
-                description: updatedDescription,
-                caption: updatedCaption,
-                metadata: mergedMetadata,
-                tags: mergedTags,
-                isAnalyzing: false 
-              } 
-            : i
-        ));
-
-        if (isServerMode && img.isPersisted) {
-          try {
-            await updateImageRemote(img.id, {
-              title: updatedTitle,
-              description: updatedDescription,
-              caption: updatedCaption,
-              metadata: mergedMetadata,
-              tags: mergedTags,
-            });
-          } catch (error) {
-            console.error('Failed to update image metadata:', error);
-          }
-        }
-        
-        toast({
-          title: "Image analyzed",
-          description: `"${analysis.title || img.title}" has been processed with AI`,
-        });
-      } catch (error) {
-        console.error('Failed to analyze image:', error);
-        
-        const errorMessage = error instanceof APIError ? error.message : 'Unknown error';
-        const description = generateFallbackDescription(img.metadata, img.name);
-        
-        setImages(prev => prev.map(i => 
-          i.id === img.id 
-            ? { 
-                ...i, 
-                description,
-                isAnalyzing: false 
-              } 
-            : i
-        ));
-
-        if (isServerMode && img.isPersisted) {
-          try {
-            await updateImageRemote(img.id, {
-              description,
-            });
-          } catch (updateError) {
-            console.error('Failed to update fallback description:', updateError);
-          }
-        }
-
-        // Show different messages based on error type
-        if (error instanceof APIError) {
-          if (errorMessage.includes('GEMINI_API_KEY') || errorMessage.includes('API_KEY')) {
-            toast({
-              title: "AI service not configured",
-              description: "AI analysis unavailable. Using default metadata-based captions.",
-              variant: "destructive",
-            });
-          } else if (errorMessage.includes('credits') || errorMessage.includes('402')) {
-            toast({
-              title: "AI credits exhausted",
-              description: "Please add credits to your AI service account.",
-              variant: "destructive",
-            });
-          } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
-            toast({
-              title: "Rate limited",
-              description: "Too many requests. Please wait a moment and try again.",
-              variant: "destructive",
-            });
-          } else {
-            toast({
-              title: "Analysis failed",
-              description: `${errorMessage}. Using default metadata-based values.`,
-              variant: "destructive",
-            });
-          }
-        } else {
-          toast({
-            title: "Analysis failed",
-            description: "Could not analyze image. Using default metadata-based values.",
+            title: "Delete failed",
+            description: error instanceof Error ? error.message : "Unable to delete image",
             variant: "destructive",
           });
         }
       }
-    }
-  }, [extractMetadata, isServerMode, settings.autoAnalyze]);
+    },
+    [isServerMode]
+  );
 
-  const updateTitle = useCallback((id: string, title: string) => {
-    setImages(prev => prev.map(img => 
-      img.id === id ? { ...img, title } : img
-    ));
-
-    const target = images.find(img => img.id === id);
-    if (isServerMode && target?.isPersisted) {
-      void updateImageRemote(id, { title }).catch(error => {
-        console.error('Failed to update title:', error);
-      });
-    }
-  }, [images, isServerMode]);
-
-  const updateDescription = useCallback((id: string, description: string) => {
-    setImages(prev => prev.map(img => 
-      img.id === id ? { ...img, description } : img
-    ));
-
-    const target = images.find(img => img.id === id);
-    if (isServerMode && target?.isPersisted) {
-      void updateImageRemote(id, { description }).catch(error => {
-        console.error('Failed to update description:', error);
-      });
-    }
-  }, [images, isServerMode]);
-
-  const updateCaption = useCallback((id: string, caption: string) => {
-    setImages(prev => prev.map(img => 
-      img.id === id ? { ...img, caption } : img
-    ));
-
-    const target = images.find(img => img.id === id);
-    if (isServerMode && target?.isPersisted) {
-      void updateImageRemote(id, { caption }).catch(error => {
-        console.error('Failed to update caption:', error);
-      });
-    }
-  }, [images, isServerMode]);
-
-  const regenerateCaptionForImage = useCallback(async (id: string) => {
-    const image = images.find(i => i.id === id);
-    if (!image) return;
-
-    setImages(prev => prev.map(img => 
-      img.id === id ? { ...img, isAnalyzing: true } : img
-    ));
-
-    try {
-      const base64 = image.file 
-        ? await fileToBase64(image.file) 
-        : await urlToBase64(image.url);
-      const newCaption = await regenerateCaption(base64);
-      
-      setImages(prev => prev.map(img => 
-        img.id === id ? { ...img, caption: newCaption, isAnalyzing: false } : img
-      ));
-
-      if (isServerMode && image.isPersisted) {
-        try {
-          await updateImageRemote(id, { caption: newCaption });
-        } catch (error) {
-          console.error('Failed to persist regenerated caption:', error);
-        }
-      }
-      
-      toast({
-        title: "Caption regenerated",
-        description: "A new AI caption has been generated",
-      });
-    } catch (error) {
-      setImages(prev => prev.map(img => 
-        img.id === id ? { ...img, isAnalyzing: false } : img
-      ));
-      const errorMessage = error instanceof APIError ? error.message : 'Unknown error';
-      
-      if (error instanceof APIError && (errorMessage.includes('GEMINI_API_KEY') || errorMessage.includes('API_KEY'))) {
-        toast({
-          title: "AI service not configured",
-          description: "AI caption regeneration unavailable.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Failed to regenerate",
-          description: error instanceof Error ? error.message : "Could not regenerate caption",
-          variant: "destructive",
-        });
-      }
-    }
-  }, [images, isServerMode]);
-
-  const deleteImage = useCallback((id: string) => {
-    setImages(prev => {
-      const img = prev.find(i => i.id === id);
-      if (img?.url && img.url.startsWith('blob:')) {
-        URL.revokeObjectURL(img.url);
-      }
-      return prev.filter(i => i.id !== id);
-    });
-
-    const target = images.find(img => img.id === id);
-    if (isServerMode && target?.isPersisted) {
-      void deleteImageRemote(id).catch(error => {
-        console.error('Failed to delete image:', error);
-      });
-    }
-
-    toast({
-      title: "Image deleted",
-      description: "The image has been removed from the gallery",
-    });
-  }, [images, isServerMode]);
-
-  const deleteImages = useCallback((ids: string[]) => {
-    setImages(prev => {
-      prev.forEach(img => {
-        if (ids.includes(img.id) && img.url && img.url.startsWith('blob:')) {
-          URL.revokeObjectURL(img.url);
-        }
-      });
-      return prev.filter(img => !ids.includes(img.id));
-    });
-
-    if (isServerMode) {
-      void bulkDeleteImages({ ids }).catch(error => {
-        console.error('Failed to bulk delete images:', error);
-      });
-    }
-
-    toast({
-      title: "Images deleted",
-      description: `${ids.length} image${ids.length !== 1 ? 's' : ''} removed`,
-    });
-  }, [isServerMode]);
-
-  const clearGallery = useCallback(() => {
-    images.forEach(img => {
-      if (img.url && img.url.startsWith('blob:')) {
-        URL.revokeObjectURL(img.url);
-      }
-    });
+  const clearGallery = useCallback(async () => {
     setImages([]);
 
     if (isServerMode) {
-      void bulkDeleteImages({ all: true }).catch(error => {
-        console.error('Failed to clear gallery:', error);
-      });
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
+      try {
+        await bulkDeleteImages({ all: true });
+      } catch (error) {
+        console.error("Failed to clear remote gallery:", error);
+      }
+      return;
     }
 
-    toast({
-      title: "Gallery cleared",
-      description: "All images have been removed",
-    });
-  }, [images, isServerMode]);
+    localStorage.removeItem(STORAGE_KEY);
+  }, [isServerMode]);
 
   return {
-    images,
+    images: images.map((img) => ({ ...img, createdAt: toDate(img.createdAt) })),
     isLoading,
     addImages,
     updateTitle,
@@ -535,7 +431,6 @@ export const useGallery = () => {
     updateCaption,
     regenerateCaptionForImage,
     deleteImage,
-    deleteImages,
     clearGallery,
   };
 };

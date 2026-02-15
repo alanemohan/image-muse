@@ -75,7 +75,7 @@ export const GlassCard = ({
           : undefined
       }
       transition={{ duration: 0.3, ease: "easeOut" }}
-      {...anyProps(props)}
+      {...props}
     >
       {/* 3D Depth Elements */}
       <div 
@@ -88,6 +88,3 @@ export const GlassCard = ({
     </motion.div>
   );
 };
-
-// Helper to safely pass motion props
-const anyProps = (props: any) => props;

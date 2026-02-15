@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -11,6 +11,10 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
+    "useDefineForClassFields": true,
+
+    /* Type definitions */
+    "types": ["vite/client", "vitest/globals"],
 
     /* Linting */
     "strict": true,
@@ -18,5 +22,9 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "src",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }
