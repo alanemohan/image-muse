@@ -1,5 +1,20 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
+const configuredApiBaseUrl =
+  typeof import.meta.env.VITE_API_BASE_URL === "string"
+    ? import.meta.env.VITE_API_BASE_URL.trim()
+    : "";
+
+const API_BASE_URL = configuredApiBaseUrl
+  ? configuredApiBaseUrl.replace(/\/+$/, "")
+  : import.meta.env.DEV
+    ? "http://localhost:4000"
+    : "";
+
+const toApiUrl = (path: string): string => {
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
+};
 
 export type ApiError = Error & {
   status?: number;
@@ -78,7 +93,7 @@ export const apiFetch = async <T>(
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(toApiUrl(path), {
       ...options,
       headers,
       signal: controller.signal,
