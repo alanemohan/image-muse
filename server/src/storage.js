@@ -31,6 +31,7 @@ const mapImage = (row) => {
     file_path: row.file_path,
     metadata: parseJson(row.metadata_json, {}),
     tags: parseJson(row.tags_json, []),
+    analysis: parseJson(row.analysis_json, null),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -66,6 +67,7 @@ export const createDatabase = (dbPath, options = {}) => {
       file_path TEXT,
       metadata_json TEXT,
       tags_json TEXT,
+      analysis_json TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -164,12 +166,13 @@ export const createDatabase = (dbPath, options = {}) => {
     addColumnIfMissing("images", "file_path", "TEXT");
     addColumnIfMissing("images", "metadata_json", "TEXT");
     addColumnIfMissing("images", "tags_json", "TEXT");
+    addColumnIfMissing("images", "analysis_json", "TEXT");
 
     const columns = getColumnNames("images");
     const hasLegacyMetadata = columns.has("metadata");
     const hasLegacyTags = columns.has("tags");
 
-    const selectColumns = ["id", "metadata_json", "tags_json"];
+    const selectColumns = ["id", "metadata_json", "tags_json", "analysis_json"];
     if (hasLegacyMetadata) selectColumns.push("metadata");
     if (hasLegacyTags) selectColumns.push("tags");
 
@@ -182,7 +185,7 @@ export const createDatabase = (dbPath, options = {}) => {
     const updateStatement = db.prepare(
       `
       UPDATE images
-      SET metadata_json = ?, tags_json = ?
+      SET metadata_json = ?, tags_json = ?, analysis_json = ?
       WHERE id = ?
       `
     );
@@ -192,11 +195,14 @@ export const createDatabase = (dbPath, options = {}) => {
         const metadataSource =
           row.metadata_json ?? (hasLegacyMetadata ? row.metadata : null);
         const tagsSource = row.tags_json ?? (hasLegacyTags ? row.tags : null);
+        const analysisSource = row.analysis_json ?? null;
         const metadataJson = JSON.stringify(parseJson(metadataSource, {}));
         const parsedTags = parseJson(tagsSource, []);
         const tagsJson = JSON.stringify(Array.isArray(parsedTags) ? parsedTags : []);
+        const analysisJson =
+          analysisSource == null ? null : JSON.stringify(parseJson(analysisSource, null));
 
-        updateStatement.run(metadataJson, tagsJson, row.id);
+        updateStatement.run(metadataJson, tagsJson, analysisJson, row.id);
       }
     });
 
@@ -474,6 +480,7 @@ export const createDatabase = (dbPath, options = {}) => {
       file_path: payload.file_path ?? null,
       metadata_json: JSON.stringify(payload.metadata ?? {}),
       tags_json: JSON.stringify(payload.tags ?? []),
+      analysis_json: JSON.stringify(payload.analysis ?? null),
       created_at: now,
       updated_at: now,
     };
@@ -482,10 +489,10 @@ export const createDatabase = (dbPath, options = {}) => {
       `
       INSERT INTO images (
         id, user_id, name, title, description, caption,
-        url, file_path, metadata_json, tags_json, created_at, updated_at
+        url, file_path, metadata_json, tags_json, analysis_json, created_at, updated_at
       ) VALUES (
         @id, @user_id, @name, @title, @description, @caption,
-        @url, @file_path, @metadata_json, @tags_json, @created_at, @updated_at
+        @url, @file_path, @metadata_json, @tags_json, @analysis_json, @created_at, @updated_at
       )
       `
     ).run(image);
@@ -520,6 +527,10 @@ export const createDatabase = (dbPath, options = {}) => {
         updates.tags === undefined
           ? existing.tags_json
           : JSON.stringify(updates.tags ?? []),
+      analysis_json:
+        updates.analysis === undefined
+          ? existing.analysis_json
+          : JSON.stringify(updates.analysis ?? null),
       updated_at: new Date().toISOString(),
     };
 
@@ -535,6 +546,7 @@ export const createDatabase = (dbPath, options = {}) => {
         file_path = @file_path,
         metadata_json = @metadata_json,
         tags_json = @tags_json,
+        analysis_json = @analysis_json,
         updated_at = @updated_at
       WHERE id = @id AND user_id = @user_id
       `

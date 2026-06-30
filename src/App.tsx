@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Outlet, Link } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -14,20 +15,20 @@ import { useAuth } from "@/context/AuthContext";
 import { FavoritesProvider } from "@/context/FavoritesContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 
-import Index from "@/pages/Index";
-import NotFound from "@/pages/NotFound";
-import Settings from "@/pages/Settings";
-import About from "@/pages/About";
-import Explore from "@/pages/Explore";
-import AIHub from "@/pages/AIHub";
-import Pulse from "@/pages/Pulse";
-import SignIn from "@/pages/SignIn";
-import SignUp from "@/pages/SignUp";
-import Profile from "@/pages/Profile";
-import Favorites from "@/pages/Favorites";
-import Admin from "@/pages/Admin";
-import Errors from "@/pages/Errors";
-import { ImageDetailPage } from "@/pages/ImageDetail";
+const Index = lazy(() => import("@/pages/Index"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const About = lazy(() => import("@/pages/About"));
+const Explore = lazy(() => import("@/pages/Explore"));
+const AIHub = lazy(() => import("@/pages/AIHub"));
+const Pulse = lazy(() => import("@/pages/Pulse"));
+const SignIn = lazy(() => import("@/pages/SignIn"));
+const SignUp = lazy(() => import("@/pages/SignUp"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const Favorites = lazy(() => import("@/pages/Favorites"));
+const Admin = lazy(() => import("@/pages/Admin"));
+const Errors = lazy(() => import("@/pages/Errors"));
+const ImageDetailPage = lazy(() => import("@/pages/ImageDetail").then((module) => ({ default: module.ImageDetailPage })));
 
 // ✅ React Query client (singleton)
 const queryClient = new QueryClient({
@@ -67,6 +68,12 @@ const LoginRequired = () => (
   </div>
 );
 
+const RouteFallback = () => (
+  <div className="min-h-[70vh] flex items-center justify-center text-slate-400">
+    Loading page...
+  </div>
+);
+
 const RequireAuth = () => {
   const { user, loading } = useAuth();
 
@@ -100,25 +107,27 @@ const App = () => {
                   <FuturisticBackground />
                   <Navbar />
 
-                  <Routes>
-                    <Route path="/signin" element={<SignIn />} />
-                    <Route path="/signup" element={<SignUp />} />
+                  <Suspense fallback={<RouteFallback />}>
+                    <Routes>
+                      <Route path="/signin" element={<SignIn />} />
+                      <Route path="/signup" element={<SignUp />} />
 
-                    <Route element={<RequireAuth />}>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/explore" element={<Explore />} />
-                      <Route path="/ai-hub" element={<AIHub />} />
-                      <Route path="/pulse" element={<Pulse />} />
-                      <Route path="/profile" element={<Profile />} />
-                      <Route path="/favorites" element={<Favorites />} />
-                      <Route path="/image/:id" element={<ImageDetailPage />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/about" element={<About />} />
-                      <Route path="/admin" element={<Admin />} />
-                      <Route path="/errors" element={<Errors />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Route>
-                  </Routes>
+                      <Route element={<RequireAuth />}>
+                        <Route path="/" element={<Index />} />
+                        <Route path="/explore" element={<Explore />} />
+                        <Route path="/ai-hub" element={<AIHub />} />
+                        <Route path="/pulse" element={<Pulse />} />
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/favorites" element={<Favorites />} />
+                        <Route path="/image/:id" element={<ImageDetailPage />} />
+                        <Route path="/settings" element={<Settings />} />
+                        <Route path="/about" element={<About />} />
+                        <Route path="/admin" element={<Admin />} />
+                        <Route path="/errors" element={<Errors />} />
+                        <Route path="*" element={<NotFound />} />
+                      </Route>
+                    </Routes>
+                  </Suspense>
                 </div>
               </BrowserRouter>
             </TooltipProvider>

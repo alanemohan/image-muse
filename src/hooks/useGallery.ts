@@ -83,6 +83,7 @@ const normalizeStoredImages = (raw: unknown[]): GalleryImage[] =>
       createdAt: toDate(img.createdAt ?? new Date().toISOString()),
       source: img.source ?? { type: "remote", file: null },
       file: null,
+      analysis: img.analysis,
       isAnalyzing: false,
     }));
 
@@ -163,7 +164,7 @@ export const useGallery = () => {
     }
 
     const minimal = images.map(
-      ({ id, name, title, description, caption, metadata, createdAt, tags, url }) => ({
+      ({ id, name, title, description, caption, metadata, createdAt, tags, url, analysis }) => ({
         id,
         name,
         title,
@@ -173,6 +174,7 @@ export const useGallery = () => {
         createdAt,
         tags,
         url,
+        analysis,
         source: { type: "remote", file: null as null },
       })
     );
@@ -224,6 +226,7 @@ export const useGallery = () => {
               caption: localDraft.caption,
               metadata,
               tags: localDraft.tags,
+              analysis: null,
             });
 
             activeId = persisted.id;
@@ -253,7 +256,10 @@ export const useGallery = () => {
         }
 
         try {
-          const analysis = await analyzeImage(base64);
+          const analysis = await analyzeImage(base64, {
+            fileName: file.name,
+            metadata,
+          });
 
           setImages((prev) =>
             prev.map((img) =>
@@ -264,6 +270,7 @@ export const useGallery = () => {
                     description: analysis.description || "No description available",
                     caption: analysis.caption || img.caption,
                     tags: Array.from(new Set([...img.tags, ...(analysis.tags || [])])),
+                    analysis,
                     isAnalyzing: false,
                   }
                 : img
@@ -276,6 +283,7 @@ export const useGallery = () => {
               description: analysis.description,
               caption: analysis.caption,
               tags: analysis.tags,
+              analysis,
             });
           }
 

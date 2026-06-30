@@ -143,13 +143,570 @@ const parseHuggingFaceCaption = (payload) => {
   }
   return "";
 };
-const createAnalyzeFallback = () => ({
-  title: "Untitled Image",
-  description: "AI analysis is temporarily unavailable. Basic metadata was applied instead.",
-  caption: "A freshly uploaded image.",
-  tags: ["image", "upload"],
-  fallback: true,
-});
+const tryParseJson = (value) => {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.replace(/```json|```/g, "").trim();
+  if (!trimmed) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+};
+const normalizeTags = (tags) =>
+  Array.from(
+    new Set(
+      Array.isArray(tags)
+        ? tags
+            .map((tag) => String(tag).trim())
+            .filter(Boolean)
+            .slice(0, 20)
+        : []
+    )
+  );
+const buildTaskPrompt = ({ task, prompt, hasImage }) => {
+  const baseInstructions = hasImage
+    ? "Analyze the provided image and return JSON only."
+    : "Answer the request and return JSON only.";
+
+  switch (task) {
+    case "caption":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"caption\": string, \"alternatives\": string[]}.`,
+        userPrompt: prompt || "Write a concise, vivid caption.",
+      };
+    case "alt_text":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"altText\": string, \"confidence\": number}.`,
+        userPrompt: prompt || "Write accessible alt text that describes the image clearly.",
+      };
+    case "tags":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"tags\": string[], \"summary\": string}.`,
+        userPrompt: prompt || "Generate practical search tags for this image.",
+      };
+    case "ocr":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"text\": string, \"confidence\": number, \"notes\": string}.`,
+        userPrompt: prompt || "Extract visible text exactly as seen in the image.",
+      };
+    case "palette":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"palette\": [{\"name\": string, \"hex\": string, \"usage\": string}]}.`,
+        userPrompt: prompt || "Extract the dominant colors and describe their usage.",
+      };
+    case "quality":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"score\": number, \"assessment\": string, \"improvements\": string[]}.`,
+        userPrompt: prompt || "Assess technical image quality and suggest improvements.",
+      };
+    case "scene":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"scene\": string, \"mood\": string, \"composition\": string}.`,
+        userPrompt: prompt || "Describe the scene, mood, and composition.",
+      };
+    case "style":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"style\": string, \"similarStyles\": string[], \"why\": string}.`,
+        userPrompt: prompt || "Identify the visual style and comparable styles.",
+      };
+    case "prompt":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"prompt\": string, \"negativePrompt\": string, \"variations\": string[]}.`,
+        userPrompt: prompt || "Generate a production-quality creative prompt.",
+      };
+    case "enhance_prompt":
+      return {
+        systemPrompt: `${baseInstructions} Return {\"prompt\": string, \"improvements\": string[]}.`,
+        userPrompt: prompt || "Improve the user's prompt while keeping intent intact.",
+      };
+    case "analysis":
+    default:
+      return {
+        systemPrompt: `${baseInstructions} Return JSON with title, description, caption, tags, analysis, metadata, confidence, and recommendations.`,
+        userPrompt: prompt || "Provide a detailed image analysis.",
+      };
+  }
+};
+const parseAiTaskResult = ({ task, text }) => {
+  const parsed = tryParseJson(text);
+
+  if (task === "caption") {
+    const caption =
+      typeof parsed?.caption === "string"
+        ? parsed.caption.trim()
+        : typeof text === "string"
+          ? text.trim()
+          : "";
+
+    return {
+      caption,
+      alternatives: Array.isArray(parsed?.alternatives) ? parsed.alternatives.slice(0, 5) : [],
+    };
+  }
+
+  if (task === "alt_text") {
+    return {
+      altText:
+        typeof parsed?.altText === "string"
+          ? parsed.altText.trim()
+          : typeof text === "string"
+            ? text.trim()
+            : "",
+      confidence: typeof parsed?.confidence === "number" ? parsed.confidence : 0.7,
+    };
+  }
+
+  if (task === "tags") {
+    return {
+      tags: normalizeTags(parsed?.tags),
+      summary: typeof parsed?.summary === "string" ? parsed.summary.trim() : "",
+    };
+  }
+
+  if (task === "ocr") {
+    return {
+      text:
+        typeof parsed?.text === "string"
+          ? parsed.text.trim()
+          : typeof text === "string"
+            ? text.trim()
+            : "",
+      confidence: typeof parsed?.confidence === "number" ? parsed.confidence : 0.7,
+      notes: typeof parsed?.notes === "string" ? parsed.notes.trim() : "",
+    };
+  }
+
+  if (task === "palette") {
+    return {
+      palette: Array.isArray(parsed?.palette)
+        ? parsed.palette
+            .map((item) => ({
+              name: typeof item?.name === "string" ? item.name.trim() : "",
+              hex: typeof item?.hex === "string" ? item.hex.trim() : "",
+              usage: typeof item?.usage === "string" ? item.usage.trim() : "",
+            }))
+            .filter((item) => item.name || item.hex)
+            .slice(0, 8)
+        : [],
+    };
+  }
+
+  if (task === "quality") {
+    return {
+      score: typeof parsed?.score === "number" ? parsed.score : 0.7,
+      assessment:
+        typeof parsed?.assessment === "string" ? parsed.assessment.trim() : "",
+      improvements: Array.isArray(parsed?.improvements) ? parsed.improvements.slice(0, 6) : [],
+    };
+  }
+
+  if (task === "scene") {
+    return {
+      scene: typeof parsed?.scene === "string" ? parsed.scene.trim() : "",
+      mood: typeof parsed?.mood === "string" ? parsed.mood.trim() : "",
+      composition:
+        typeof parsed?.composition === "string" ? parsed.composition.trim() : "",
+    };
+  }
+
+  if (task === "style") {
+    return {
+      style: typeof parsed?.style === "string" ? parsed.style.trim() : "",
+      similarStyles: Array.isArray(parsed?.similarStyles) ? parsed.similarStyles.slice(0, 6) : [],
+      why: typeof parsed?.why === "string" ? parsed.why.trim() : "",
+    };
+  }
+
+  if (task === "prompt") {
+    return {
+      prompt: typeof parsed?.prompt === "string" ? parsed.prompt.trim() : "",
+      negativePrompt:
+        typeof parsed?.negativePrompt === "string" ? parsed.negativePrompt.trim() : "",
+      variations: Array.isArray(parsed?.variations) ? parsed.variations.slice(0, 5) : [],
+    };
+  }
+
+  if (task === "enhance_prompt") {
+    return {
+      prompt: typeof parsed?.prompt === "string" ? parsed.prompt.trim() : "",
+      improvements: Array.isArray(parsed?.improvements) ? parsed.improvements.slice(0, 5) : [],
+    };
+  }
+
+  const analysis = parsed && typeof parsed === "object" ? parsed : null;
+  return {
+    title: typeof analysis?.title === "string" ? analysis.title.trim() : "Image",
+    description:
+      typeof analysis?.description === "string"
+        ? analysis.description.trim()
+        : typeof text === "string"
+          ? text.trim()
+          : "",
+    caption:
+      typeof analysis?.caption === "string"
+        ? analysis.caption.trim()
+        : typeof text === "string"
+          ? text.split(".")[0].trim() + "."
+          : "",
+    tags: normalizeTags(analysis?.tags),
+    metadata: analysis?.metadata && typeof analysis.metadata === "object" ? analysis.metadata : {},
+    analysis: analysis?.analysis && typeof analysis.analysis === "object" ? analysis.analysis : {},
+    confidence: typeof analysis?.confidence === "number" ? analysis.confidence : 0.7,
+    recommendations: Array.isArray(analysis?.recommendations) ? analysis.recommendations.slice(0, 8) : [],
+    raw: analysis ?? null,
+  };
+};
+const callModelWithImage = async ({
+  task,
+  imagePayload,
+  systemPrompt,
+  userPrompt,
+  geminiKey,
+  providerErrors,
+}) => {
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  { text: `${systemPrompt}\n\n${userPrompt}` },
+                  {
+                    inline_data: {
+                      mime_type: imagePayload.mimeType,
+                      data: imagePayload.data,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const rawText = await response.text().catch(() => "");
+        providerErrors.push({ provider: "gemini", model, status: response.status, raw: rawText });
+        continue;
+      }
+
+      const data = await response.json();
+      const parts = data?.candidates?.[0]?.content?.parts;
+      const text = Array.isArray(parts)
+        ? parts.map((part) => part?.text || "").join("\n").trim()
+        : "";
+
+      if (!text) {
+        providerErrors.push({ provider: "gemini", model, status: 502, raw: "Empty response text" });
+        continue;
+      }
+
+      return parseAiTaskResult({ task, text });
+    } catch (error) {
+      providerErrors.push({
+        provider: "gemini",
+        model,
+        status: 502,
+        raw: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return null;
+};
+const callTextModel = async ({ task, systemPrompt, userPrompt, geminiKey, providerErrors }) => {
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }],
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const rawText = await response.text().catch(() => "");
+        providerErrors.push({ provider: "gemini", model, status: response.status, raw: rawText });
+        continue;
+      }
+
+      const data = await response.json();
+      const parts = data?.candidates?.[0]?.content?.parts;
+      const text = Array.isArray(parts)
+        ? parts.map((part) => part?.text || "").join("\n").trim()
+        : "";
+
+      if (!text) {
+        providerErrors.push({ provider: "gemini", model, status: 502, raw: "Empty response text" });
+        continue;
+      }
+
+      return parseAiTaskResult({ task, text });
+    } catch (error) {
+      providerErrors.push({
+        provider: "gemini",
+        model,
+        status: 502,
+        raw: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return null;
+};
+const runAiTask = async ({ req, task, imageBase64, prompt }) => {
+  const geminiKey = getGeminiKeyFromRequest(req);
+  const openRouterKey = getOpenRouterKeyFromRequest(req);
+  const huggingFaceKey = getHuggingFaceKeyFromRequest(req);
+  const providerErrors = [];
+
+  const imagePayload = imageBase64 ? parseImagePayload(imageBase64) : null;
+  if (imageBase64 && !imagePayload?.data) {
+    return { error: { status: 400, message: "Invalid image data" } };
+  }
+
+  const imageRequiredTasks = new Set([
+    "analysis",
+    "caption",
+    "alt_text",
+    "tags",
+    "ocr",
+    "palette",
+    "quality",
+    "scene",
+    "style",
+  ]);
+
+  if (imageRequiredTasks.has(task) && !imagePayload) {
+    return { error: { status: 400, message: "Image data is required for this task" } };
+  }
+
+  const { systemPrompt, userPrompt } = buildTaskPrompt({
+    task,
+    prompt,
+    hasImage: Boolean(imagePayload),
+  });
+
+  const textOnlyTasks = new Set(["prompt", "enhance_prompt"]);
+
+  const tryGemini = async () => {
+    if (!geminiKey) return null;
+    return imagePayload
+      ? callModelWithImage({ task, imagePayload, systemPrompt, userPrompt, geminiKey, providerErrors })
+      : callTextModel({ task, systemPrompt, userPrompt, geminiKey, providerErrors });
+  };
+
+  const tryOpenRouter = async () => {
+    if (!openRouterKey) return null;
+
+    const imageDataUri = imagePayload
+      ? `data:${imagePayload.mimeType};base64,${imagePayload.data}`
+      : null;
+
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openRouterKey}`,
+          "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "http://localhost:5173",
+          "X-Title": "Image Muse",
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            imageDataUri
+              ? {
+                  role: "user",
+                  content: [
+                    { type: "text", text: userPrompt },
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: imageDataUri,
+                      },
+                    },
+                  ],
+                }
+              : { role: "user", content: userPrompt },
+          ],
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const rawText = await response.text().catch(() => "");
+        providerErrors.push({ provider: "openrouter", model: OPENROUTER_MODEL, status: response.status, raw: rawText });
+        return null;
+      }
+
+      const data = await response.json();
+      const text = parseOpenRouterContent(data?.choices?.[0]?.message?.content);
+
+      if (!text) {
+        providerErrors.push({ provider: "openrouter", model: OPENROUTER_MODEL, status: 502, raw: "Empty response text" });
+        return null;
+      }
+
+      return parseAiTaskResult({ task, text });
+    } catch (error) {
+      providerErrors.push({ provider: "openrouter", model: OPENROUTER_MODEL, status: 502, raw: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+  };
+
+  const tryHuggingFace = async () => {
+    if (!huggingFaceKey || !imagePayload || textOnlyTasks.has(task)) return null;
+
+    try {
+      const response = await fetch(
+        `https://api-inference.huggingface.co/models/${encodeURIComponent(HUGGINGFACE_VISION_MODEL)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${huggingFaceKey}`,
+            "Content-Type": imagePayload.mimeType,
+          },
+          body: Buffer.from(imagePayload.data, "base64"),
+        }
+      );
+
+      if (!response.ok) {
+        const rawText = await response.text().catch(() => "");
+        providerErrors.push({ provider: "huggingface", model: HUGGINGFACE_VISION_MODEL, status: response.status, raw: rawText });
+        return null;
+      }
+
+      const data = await response.json();
+      const caption = parseHuggingFaceCaption(data);
+      if (!caption) {
+        providerErrors.push({ provider: "huggingface", model: HUGGINGFACE_VISION_MODEL, status: 502, raw: JSON.stringify(data) });
+        return null;
+      }
+
+      if (task === "caption") {
+        return { caption, alternatives: [] };
+      }
+
+      if (task === "analysis") {
+        return {
+          title: "Image",
+          description: caption,
+          caption,
+          tags: ["image", "caption"],
+          metadata: {},
+          analysis: { summary: caption },
+          confidence: 0.55,
+          recommendations: [],
+        };
+      }
+
+      return null;
+    } catch (error) {
+      providerErrors.push({ provider: "huggingface", model: HUGGINGFACE_VISION_MODEL, status: 502, raw: error instanceof Error ? error.message : String(error) });
+      return null;
+    }
+  };
+
+  const providerResult = await tryGemini() || await tryOpenRouter() || await tryHuggingFace();
+
+  if (!providerResult) {
+    return {
+      error: {
+        status: providerErrors[0]?.status ?? 503,
+        message: "AI providers unavailable",
+        detail: JSON.stringify(providerErrors).slice(0, 4000),
+      },
+    };
+  }
+
+  return { result: providerResult };
+};
+const deriveAspectLabel = (metadata = {}) => {
+  if (typeof metadata.width !== "number" || typeof metadata.height !== "number") return "unknown";
+  const ratio = metadata.width / metadata.height;
+  if (ratio > 1.5) return "landscape";
+  if (ratio < 0.7) return "portrait";
+  return "square";
+};
+const buildFallbackAnalysis = ({ fileName = "", metadata = {} } = {}) => {
+  const stem = String(fileName || "untitled image")
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim();
+  const title = stem
+    ? stem.replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : "Untitled Image";
+  const aspect = deriveAspectLabel(metadata);
+  const tags = normalizeTags([
+    "image",
+    "upload",
+    aspect,
+    metadata.fileType?.includes("svg") ? "vector" : null,
+    metadata.make,
+    metadata.model,
+    typeof metadata.iso === "number" && metadata.iso > 800 ? "low-light" : null,
+  ]);
+  const sizeLabel =
+    typeof metadata.width === "number" && typeof metadata.height === "number"
+      ? `${metadata.width} × ${metadata.height}`
+      : "unknown dimensions";
+  const cameraLabel =
+    metadata.make && metadata.model ? `${metadata.make} ${metadata.model}` : "camera metadata unavailable";
+
+  return {
+    title,
+    description: `AI analysis is temporarily unavailable. ${sizeLabel} image with ${aspect} composition and ${cameraLabel}.`,
+    caption: `A ${aspect} image named ${title.toLowerCase()}.`,
+    tags,
+    analysis: {
+      scene: `A ${aspect} composition with basic metadata extraction only.`,
+      mood: aspect === "landscape" ? "open" : aspect === "portrait" ? "focused" : "balanced",
+      lighting:
+        typeof metadata.iso === "number" && metadata.iso > 800
+          ? "Likely low-light or high-sensitivity capture."
+          : "Lighting could not be inferred without a vision model.",
+      style: metadata.fileType?.includes("svg") ? "vector illustration" : "general image",
+      objects: [],
+      colors: [],
+      text: "",
+      quality:
+        typeof metadata.width === "number" && typeof metadata.height === "number"
+          ? `${metadata.width} × ${metadata.height} source image`
+          : "unknown",
+      improvements: [
+        "Run a vision model when Gemini or a fallback provider is available.",
+        "Add OCR or accessibility text if the image contains embedded text.",
+      ],
+    },
+    metadata,
+    confidence: 0.35,
+    recommendations: [
+      "Retry analysis when a model provider is configured.",
+      "Review metadata for manual tagging and captioning.",
+    ],
+    fallback: true,
+  };
+};
 const createCaptionFallback = () => ({
   caption: "A freshly uploaded image.",
   fallback: true,
@@ -487,6 +1044,25 @@ app.post("/uploads", authMiddleware, upload.single("image"), (req, res) => {
   });
 });
 
+app.post("/uploads/sign-urls", authMiddleware, (req, res) => {
+  const schema = z.object({
+    paths: z.array(z.string().min(1)).default([]),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid upload paths" });
+  }
+
+  const urls = Object.fromEntries(
+    parsed.data.paths
+      .filter((pathValue) => pathValue.startsWith("/uploads/"))
+      .map((pathValue) => [pathValue, pathValue])
+  );
+
+  return res.json({ urls });
+});
+
 /* ------------------ IMAGES ------------------ */
 
 const imageSchema = z.object({
@@ -671,8 +1247,24 @@ app.get("/ai/providers", optionalAuthMiddleware, async (req, res) => {
 });
 
 const analyzeSchema = z.object({
-  imageBase64: z.string().min(1),
+  imageBase64: z.string().min(1).optional(),
   type: z.enum(["analyze", "regenerate_caption"]).optional(),
+  task: z.enum([
+    "analysis",
+    "caption",
+    "alt_text",
+    "tags",
+    "ocr",
+    "palette",
+    "quality",
+    "scene",
+    "style",
+    "prompt",
+    "enhance_prompt",
+  ]).optional(),
+  prompt: z.string().optional(),
+  fileName: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 });
 
 app.post("/analyze-image", optionalAuthMiddleware, async (req, res) => {
@@ -681,299 +1273,108 @@ app.post("/analyze-image", optionalAuthMiddleware, async (req, res) => {
     return res.status(400).json({ error: "Image data is required" });
   }
 
-  const { imageBase64, type = "analyze" } = parsed.data;
-  const geminiKey = getGeminiKeyFromRequest(req);
-  const openRouterKey = getOpenRouterKeyFromRequest(req);
-  const huggingFaceKey = getHuggingFaceKeyFromRequest(req);
+  const { imageBase64, type = "analyze", task, prompt, fileName, metadata } = parsed.data;
+  const normalizedTask =
+    task || (type === "regenerate_caption" ? "caption" : "analysis");
+  const runResult = await runAiTask({
+    req,
+    task: normalizedTask,
+    imageBase64,
+    prompt,
+  });
 
-  const systemPrompt =
-    type === "analyze"
-      ? `Return ONLY valid JSON with:
-title, description, caption, tags (array)`
-      : "Generate a single creative caption only.";
-
-  const userPrompt =
-    type === "analyze"
-      ? "Analyze this image."
-      : "Generate a new caption.";
-
-  const imagePayload = parseImagePayload(imageBase64);
-  if (!imagePayload.data) {
-    return res.status(400).json({ error: "Invalid image data" });
-  }
-
-  const providerErrors = [];
-
-  const tryGemini = async () => {
-    if (!geminiKey) return null;
-
-    for (const model of GEMINI_MODELS) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [
-                    { text: `${systemPrompt}\n\n${userPrompt}` },
-                    {
-                      inline_data: {
-                        mime_type: imagePayload.mimeType,
-                        data: imagePayload.data,
-                      },
-                    },
-                  ],
-                },
-              ],
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const rawText = await response.text().catch(() => "");
-          providerErrors.push({
-            provider: "gemini",
-            model,
-            status: response.status,
-            raw: rawText,
-          });
-          continue;
-        }
-
-        const data = await response.json();
-        const parts = data?.candidates?.[0]?.content?.parts;
-        const text = Array.isArray(parts)
-          ? parts.map((part) => part?.text || "").join("\n").trim()
-          : "";
-
-        if (!text) {
-          providerErrors.push({
-            provider: "gemini",
-            model,
-            status: 502,
-            raw: "Empty response text",
-          });
-          continue;
-        }
-
-        return { provider: "gemini", model, text };
-      } catch (error) {
-        providerErrors.push({
-          provider: "gemini",
-          model,
-          status: 502,
-          raw: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    return null;
-  };
-
-  const tryOpenRouter = async () => {
-    if (!openRouterKey) return null;
-
-    const imageDataUri = `data:${imagePayload.mimeType};base64,${imagePayload.data}`;
-
-    try {
-      const response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${openRouterKey}`,
-            "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "http://localhost:5173",
-            "X-Title": "Image Muse",
-          },
-          body: JSON.stringify({
-            model: OPENROUTER_MODEL,
-            messages: [
-              { role: "system", content: systemPrompt },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: userPrompt },
-                  {
-                    type: "image_url",
-                    image_url: {
-                      url: imageDataUri,
-                    },
-                  },
-                ],
-              },
-            ],
-            temperature: 0.2,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const rawText = await response.text().catch(() => "");
-        providerErrors.push({
-          provider: "openrouter",
-          model: OPENROUTER_MODEL,
-          status: response.status,
-          raw: rawText,
-        });
-        return null;
-      }
-
-      const data = await response.json();
-      const text = parseOpenRouterContent(data?.choices?.[0]?.message?.content);
-      if (!text) {
-        providerErrors.push({
-          provider: "openrouter",
-          model: OPENROUTER_MODEL,
-          status: 502,
-          raw: "Empty response text",
-        });
-        return null;
-      }
-
-      return { provider: "openrouter", model: OPENROUTER_MODEL, text };
-    } catch (error) {
-      providerErrors.push({
-        provider: "openrouter",
-        model: OPENROUTER_MODEL,
-        status: 502,
-        raw: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  };
-
-  const tryHuggingFace = async () => {
-    if (!huggingFaceKey) return null;
-
-    try {
-      const response = await fetch(
-        `https://api-inference.huggingface.co/models/${encodeURIComponent(
-          HUGGINGFACE_VISION_MODEL
-        )}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${huggingFaceKey}`,
-            "Content-Type": imagePayload.mimeType,
-          },
-          body: Buffer.from(imagePayload.data, "base64"),
-        }
-      );
-
-      if (!response.ok) {
-        const rawText = await response.text().catch(() => "");
-        providerErrors.push({
-          provider: "huggingface",
-          model: HUGGINGFACE_VISION_MODEL,
-          status: response.status,
-          raw: rawText,
-        });
-        return null;
-      }
-
-      const data = await response.json();
-      const caption = parseHuggingFaceCaption(data);
-      if (!caption) {
-        providerErrors.push({
-          provider: "huggingface",
-          model: HUGGINGFACE_VISION_MODEL,
-          status: 502,
-          raw: JSON.stringify(data),
-        });
-        return null;
-      }
-
-      if (type === "regenerate_caption") {
-        return {
-          provider: "huggingface",
-          model: HUGGINGFACE_VISION_MODEL,
-          text: caption,
-        };
-      }
-
-      return {
-        provider: "huggingface",
-        model: HUGGINGFACE_VISION_MODEL,
-        text: JSON.stringify({
-          title: "Image",
-          description: caption,
-          caption,
-          tags: ["image", "caption"],
-        }),
-      };
-    } catch (error) {
-      providerErrors.push({
-        provider: "huggingface",
-        model: HUGGINGFACE_VISION_MODEL,
-        status: 502,
-        raw: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  };
-
-  const providerResult =
-    (await tryGemini()) ||
-    (await tryOpenRouter()) ||
-    (await tryHuggingFace());
-
-  if (!providerResult) {
+  if (runResult.error) {
     db.createAiLog({
       userId: req.user?.id ?? null,
-      type,
-      statusCode: providerErrors[0]?.status ?? 502,
-      message: "AI providers unavailable",
-      raw: JSON.stringify(providerErrors).slice(0, 4000),
+      type: task || type,
+      statusCode: runResult.error.status,
+      message: runResult.error.message,
+      raw: runResult.error.detail || null,
     });
 
-    if (type === "analyze") {
-      return res.json(createAnalyzeFallback());
+    if (normalizedTask === "analysis") {
+      return res.json(buildFallbackAnalysis({ fileName, metadata }));
     }
 
-    return res.json(createCaptionFallback());
+    if (normalizedTask === "caption") {
+      return res.json(createCaptionFallback());
+    }
+
+    return res.status(runResult.error.status).json({ error: runResult.error.message });
   }
 
-  let text = providerResult.text;
+  const result = runResult.result;
 
-  if (!text) {
-    db.createAiLog({
-      userId: req.user?.id ?? null,
-      type,
-      statusCode: 502,
-      message: "Empty AI response",
-      raw: "provider_result_missing_text",
-    });
+  if (!result) {
     return res.status(502).json({ error: "Empty AI response" });
   }
 
-  text = text.replace(/```json|```/g, "").trim();
+  if (normalizedTask === "analysis") {
+    const analysis = {
+      title: result.title || "Image",
+      description: result.description || "",
+      caption: result.caption || "",
+      tags: normalizeTags(result.tags),
+      metadata: result.metadata || {},
+      analysis: result.analysis || {},
+      confidence: typeof result.confidence === "number" ? result.confidence : 0.7,
+      recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
+      raw: result.raw || null,
+    };
 
-  if (type === "analyze") {
-    try {
-      return res.json(JSON.parse(text));
-    } catch {
-      db.createAiLog({
-        userId: req.user?.id ?? null,
-        type,
-        statusCode: 200,
-        message: "AI response was not JSON; fallback used",
-        raw: text,
-      });
-      return res.json({
-        title: "Image",
-        description: text,
-        caption: text.split(".")[0] + ".",
-        tags: ["image"],
-      });
-    }
+    return res.json(analysis);
   }
 
-  res.json({ caption: text });
+  if (normalizedTask === "caption") {
+    return res.json({ caption: result.caption || result.prompt || "" });
+  }
+
+  return res.json(result);
+});
+
+app.post("/ai/workspace", optionalAuthMiddleware, async (req, res) => {
+  const parsed = z.object({
+    task: z.enum([
+      "analysis",
+      "caption",
+      "alt_text",
+      "tags",
+      "ocr",
+      "palette",
+      "quality",
+      "scene",
+      "style",
+      "prompt",
+      "enhance_prompt",
+    ]),
+    imageBase64: z.string().min(1).optional(),
+    prompt: z.string().optional(),
+  }).safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid AI workspace payload" });
+  }
+
+  const runResult = await runAiTask({
+    req,
+    task: parsed.data.task,
+    imageBase64: parsed.data.imageBase64,
+    prompt: parsed.data.prompt,
+  });
+
+  if (runResult.error) {
+    db.createAiLog({
+      userId: req.user?.id ?? null,
+      type: parsed.data.task,
+      statusCode: runResult.error.status,
+      message: runResult.error.message,
+      raw: runResult.error.detail || null,
+    });
+
+    return res.status(runResult.error.status).json({ error: runResult.error.message });
+  }
+
+  return res.json(runResult.result);
 });
 
 /* ------------------ ERROR HANDLER ------------------ */

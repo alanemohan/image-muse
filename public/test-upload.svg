@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#06122b"/>
+      <stop offset="55%" stop-color="#123f7a"/>
+      <stop offset="100%" stop-color="#0aa6c5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="28%" stop-color="#f9f0b2" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#f9f0b2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#bg)"/>
+  <circle cx="330" cy="230" r="170" fill="url(#glow)"/>
+  <circle cx="840" cy="250" r="120" fill="#ffb86b" opacity="0.55"/>
+  <rect x="190" y="470" width="820" height="130" rx="65" fill="#0a1021" opacity="0.45"/>
+  <path d="M0 650 C180 560, 330 560, 520 650 S880 740, 1200 620 L1200 800 L0 800 Z" fill="#081224" opacity="0.88"/>
+  <text x="600" y="735" font-family="Arial, sans-serif" font-size="54" text-anchor="middle" fill="#e8faff" letter-spacing="6">IMAGE MUSE TEST</text>
+</svg>

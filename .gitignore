@@ -30,8 +30,11 @@ server/uploads
 *.db-wal
 
 # Local temp files
-tmpclaude-*-cwd
+tmpclaude-*
 nul
+
+# Kiro specs (internal development)
+.kiro/
 
 # Editor directories and files
 .vscode/*

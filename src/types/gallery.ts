@@ -47,6 +47,7 @@ export interface GalleryImage {
   caption: string;
 
   metadata: ImageMetadata;
+  analysis?: AIAnalysisResult;
 
   createdAt: Date | string;
   tags: string[];
@@ -62,6 +63,8 @@ export interface AIAnalysisResult {
   description: string;
   caption: string;
   tags: string[];
+  confidence?: number;
+  recommendations?: string[];
   metadata?: {
     iso?: string;
     fNumber?: string;
@@ -74,5 +77,28 @@ export interface AIAnalysisResult {
   analysis?: {
     composition?: string;
     sentiment?: string;
+    scene?: string;
+    mood?: string;
+    lighting?: string;
+    style?: string;
+    objects?: string[];
+    colors?: Array<{ name?: string; hex?: string; usage?: string }>;
+    text?: string;
+    quality?: string;
+    improvements?: string[];
   };
+  altText?: string;
+  scene?: string;
+  quality?: {
+    score?: number;
+    assessment?: string;
+    improvements?: string[];
+  };
+  palette?: Array<{ name?: string; hex?: string; usage?: string }>;
+  raw?: unknown;
 }
+
+export type ImageAnalysisContext = {
+  fileName?: string;
+  metadata?: ImageMetadata;
+};

@@ -1,5 +1,5 @@
 import { apiFetch, getAuthToken } from "./apiClient";
-import { GalleryImage, ImageMetadata } from "@/types/gallery";
+import { AIAnalysisResult, GalleryImage, ImageMetadata } from "@/types/gallery";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
 
@@ -13,6 +13,7 @@ export type ServerImage = {
   file_path?: string | null;
   metadata?: ImageMetadata;
   tags?: string[];
+  analysis?: AIAnalysisResult | null;
   created_at: string;
   updated_at?: string;
 };
@@ -26,6 +27,7 @@ export type ImagePayload = {
   caption?: string;
   metadata?: ImageMetadata;
   tags?: string[];
+  analysis?: AIAnalysisResult | null;
 };
 
 export type ImageUpdatePayload = Partial<ImagePayload>;
@@ -91,6 +93,7 @@ export const mapServerImage = (image: ServerImage, signedUrls?: Record<string, s
   metadata: image.metadata || {},
   createdAt: new Date(image.created_at),
   tags: image.tags || [],
+  analysis: image.analysis ?? undefined,
   isAnalyzing: false,
 });
 

@@ -44,6 +44,8 @@ export const AuthProvider = ({
 
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
+  const bootstrapPromiseRef = useRef<Promise<void> | null>(null);
+  const bootstrapTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -52,35 +54,48 @@ export const AuthProvider = ({
   }, []);
 
   const bootstrap = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
+    const token = getAuthToken();
+    if (bootstrapPromiseRef.current && bootstrapTokenRef.current === token) {
+      return bootstrapPromiseRef.current;
+    }
 
+    const requestId = ++requestIdRef.current;
     setLoading(true);
 
-    const token = getAuthToken();
-    if (!token) {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      setSession(null);
-      setUser(null);
-      setLoading(false);
-      return;
-    }
+    bootstrapTokenRef.current = token;
 
-    try {
-      const currentUser = await getMe();
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-      setSession({ access_token: token });
-      setUser(currentUser);
-    } catch {
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-      setSession(null);
-      setUser(null);
-    } finally {
-      if (mountedRef.current && requestId === requestIdRef.current) {
+    const promise = (async () => {
+      if (!token) {
+        if (!mountedRef.current || requestId !== requestIdRef.current) return;
+        setSession(null);
+        setUser(null);
         setLoading(false);
+        return;
       }
-    }
+
+      try {
+        const currentUser = await getMe();
+        if (!mountedRef.current || requestId !== requestIdRef.current) return;
+
+        setSession({ access_token: token });
+        setUser(currentUser);
+      } catch {
+        if (!mountedRef.current || requestId !== requestIdRef.current) return;
+
+        setSession(null);
+        setUser(null);
+      } finally {
+        if (mountedRef.current && requestId === requestIdRef.current) {
+          setLoading(false);
+        }
+        if (bootstrapTokenRef.current === token) {
+          bootstrapPromiseRef.current = null;
+        }
+      }
+    })();
+
+    bootstrapPromiseRef.current = promise;
+    return promise;
   }, []);
 
   useEffect(() => {
