@@ -2,12 +2,21 @@
 
 > AI-powered image gallery with intelligent metadata extraction, multi-provider AI fallback, and real-time discovery feeds.
 
+![React](https://img.shields.io/badge/React-18.3.1-61DAFB?style=for-the-badge&logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4.17-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4.21.2-000000?style=for-the-badge&logo=express&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+
 [![Deploy to Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alanemohan/image-muse)
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/alanemohan/image-muse)
 
 ---
 
 ## ✨ Features
+
+> **Note:** GitHub shows this project as "84.7% TypeScript" because all React components are written in TypeScript (`.tsx` files). The actual stack is React 18 + TypeScript for the frontend.
 
 ### 🖼️ Smart Image Gallery
 - **Secure Authentication** - JWT-based signup/signin with user profiles
