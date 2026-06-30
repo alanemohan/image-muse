@@ -1,0 +1,12 @@
+*.tsx linguist-language=TypeScript
+*.ts linguist-language=TypeScript
+*.jsx linguist-language=JavaScript
+*.js linguist-language=JavaScript
+
+# Mark these as documentation to reduce their weight
+*.md linguist-documentation
+*.json linguist-documentation
+
+# Mark vendor/generated code
+node_modules/* linguist-vendored
+dist/* linguist-generated
