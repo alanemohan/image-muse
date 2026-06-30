@@ -1,6 +1,6 @@
 const configuredApiBaseUrl =
   typeof import.meta.env.VITE_API_BASE_URL === "string"
-    ? import.meta.env.VITE_API_BASE_URL.trim()
+    ? import.meta.env.VITE_API_BASE_URL.trim().replace(/^["']|["']$/g, "")
     : "";
 
 const API_BASE_URL = configuredApiBaseUrl
