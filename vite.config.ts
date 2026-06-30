@@ -12,7 +12,7 @@ export default defineConfig({
 
   server: {
     host: "::", // allows access via IPv4 & IPv6 (use "0.0.0.0" if issues arise)
-    port: 8080,
+    port: 5173,
     hmr: {
       overlay: false, // prevents error overlay blocking the UI
     },
